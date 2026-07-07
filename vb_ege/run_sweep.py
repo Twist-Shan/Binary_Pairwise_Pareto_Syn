@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import itertools
+import json
 import math
 from dataclasses import asdict
 from pathlib import Path
@@ -25,7 +27,7 @@ from .core import borda, dynamic_range_B, kappa_B, strict_pareto_set
 from .gaps import compute_gaps
 from .instances import make_instance
 from .compat import import_pandas_quietly
-from .io_utils import dumps_json, load_yaml, stable_seed, write_dataframe
+from .io_utils import dumps_json, ensure_parent, load_yaml, stable_seed, write_dataframe
 from .metrics import hamming_set_distance, set_error
 
 pd = import_pandas_quietly()
@@ -196,39 +198,76 @@ def _row_from_result(
     return row
 
 
-def _iter_experiment_jobs(config: dict, base_seed: int):
+def _iter_experiment_instance_specs(config: dict, base_seed: int):
     for exp in config.get("experiments", []):
         budgets = exp.get("budgets", config.get("budgets", [None]))
+        alg_jobs = _algorithm_jobs(config, exp)
         for rep in range(int(exp.get("n_reps", 1))):
             inst_seed = stable_seed(base_seed, exp["id"], rep, "instance")
-            theta, meta = make_instance(exp["generator"], exp.get("params", {}), inst_seed)
-            true_pareto = strict_pareto_set(theta)
-            if strict_pareto_set(borda(theta)) != true_pareto:
-                raise RuntimeError(f"Borda/Pareto mismatch in {exp['id']} rep {rep}")
-            for alg_name, alg_cfg in _algorithm_jobs(config, exp):
+            yield "experiment", exp, rep, budgets, alg_jobs, inst_seed, None
+
+
+def _iter_sweep_instance_specs(config: dict, base_seed: int):
+    algorithms = config.get("algorithms", {})
+    if not algorithms:
+        return
+    for sweep in config.get("sweeps", []):
+        for params in _grid_product(sweep["grid"]):
+            params_json = dumps_json(params)
+            for rep in range(int(sweep.get("n_reps", 1))):
+                inst_seed = stable_seed(base_seed, sweep["id"], params_json, rep, "instance")
+                inst_params = {k: v for k, v in params.items() if k != "delta"}
+                exp = {"id": sweep["id"], "generator": sweep["generator"], "params": inst_params}
+                alg_jobs = [
+                    (
+                        alg_name,
+                        {**(alg_cfg or {}), "delta": params.get("delta", (alg_cfg or {}).get("delta"))},
+                    )
+                    for alg_name, alg_cfg in algorithms.items()
+                ]
+                yield "sweep", exp, rep, [None], alg_jobs, inst_seed, params_json
+
+
+def _prepare_instance_spec(payload):
+    kind, exp, rep, budgets, alg_jobs, inst_seed, seed_extra = payload
+    theta, meta = make_instance(exp["generator"], exp.get("params", {}), inst_seed)
+    true_pareto = strict_pareto_set(theta)
+    if strict_pareto_set(borda(theta)) != true_pareto:
+        raise RuntimeError(f"Borda/Pareto mismatch in {exp['id']} rep {rep}")
+    return kind, exp, rep, budgets, alg_jobs, theta, meta, seed_extra
+
+
+def _iter_jobs_from_prepared_instances(prepared_instances, base_seed: int):
+    for kind, exp, rep, budgets, alg_jobs, theta, meta, seed_extra in prepared_instances:
+        for alg_name, alg_cfg in alg_jobs:
+            if kind == "experiment":
                 alg_budgets = [None] if alg_name in FIXED_CONFIDENCE_ALGORITHMS else budgets
                 for budget in alg_budgets:
                     if budget is None and alg_name not in FIXED_CONFIDENCE_ALGORITHMS:
                         continue
                     alg_seed = stable_seed(base_seed, exp["id"], rep, budget, alg_name, dumps_json(alg_cfg))
                     yield exp, rep, budget, alg_name, alg_cfg, theta, meta, alg_seed
+            else:
+                alg_seed = stable_seed(base_seed, exp["id"], seed_extra, rep, alg_name)
+                yield exp, rep, None, alg_name, alg_cfg, theta, meta, alg_seed
 
 
-def _iter_sweep_jobs(config: dict, base_seed: int):
-    algorithms = config.get("algorithms", {})
-    if not algorithms:
-        return
-    for sweep in config.get("sweeps", []):
-        for params in _grid_product(sweep["grid"]):
-            for rep in range(int(sweep.get("n_reps", 1))):
-                inst_seed = stable_seed(base_seed, sweep["id"], dumps_json(params), rep, "instance")
-                inst_params = {k: v for k, v in params.items() if k != "delta"}
-                theta, meta = make_instance(sweep["generator"], inst_params, inst_seed)
-                exp = {"id": sweep["id"], "generator": sweep["generator"], "params": inst_params}
-                for alg_name, alg_cfg in algorithms.items():
-                    cfg = {**(alg_cfg or {}), "delta": params.get("delta", (alg_cfg or {}).get("delta"))}
-                    alg_seed = stable_seed(base_seed, sweep["id"], dumps_json(params), rep, alg_name)
-                    yield exp, rep, None, alg_name, cfg, theta, meta, alg_seed
+def _execute_job(payload) -> dict:
+    run_id, exp, budget, alg_name, alg_cfg, theta, meta, alg_seed = payload
+    rng = np.random.default_rng(alg_seed)
+    result = _run_algorithm(alg_name, theta, budget, dict(alg_cfg or {}), rng)
+    return _row_from_result(
+        run_id,
+        alg_seed,
+        alg_name,
+        exp["id"],
+        theta,
+        meta,
+        budget,
+        (alg_cfg or {}).get("delta"),
+        dict(alg_cfg or {}),
+        result,
+    )
 
 
 def main(argv=None):
@@ -236,35 +275,98 @@ def main(argv=None):
     parser.add_argument("--config", required=True)
     parser.add_argument("--out", required=True)
     parser.add_argument("--seed", type=int)
+    parser.add_argument("--checkpoint-every", type=int, default=100)
+    parser.add_argument("--resume", action="store_true")
+    parser.add_argument("--jobs", type=int, default=1)
     args = parser.parse_args(argv)
 
     config = load_yaml(args.config)
     base_seed = int(args.seed if args.seed is not None else config.get("base_seed", 0))
-    jobs = list(_iter_experiment_jobs(config, base_seed))
-    jobs.extend(list(_iter_sweep_jobs(config, base_seed)))
-    rows = []
-    for run_id, (exp, _rep, budget, alg_name, alg_cfg, theta, meta, alg_seed) in enumerate(
-        tqdm(jobs, desc=f"running {config.get('name', Path(args.config).stem)}")
-    ):
-        rng = np.random.default_rng(alg_seed)
-        result = _run_algorithm(alg_name, theta, budget, dict(alg_cfg or {}), rng)
-        rows.append(
-            _row_from_result(
-                run_id,
-                alg_seed,
-                alg_name,
-                exp["id"],
-                theta,
-                meta,
-                budget,
-                (alg_cfg or {}).get("delta"),
-                dict(alg_cfg or {}),
-                result,
+    instance_specs = list(_iter_experiment_instance_specs(config, base_seed))
+    instance_specs.extend(list(_iter_sweep_instance_specs(config, base_seed)))
+    prep_desc = f"preparing {config.get('name', Path(args.config).stem)} instances"
+    if args.jobs <= 1:
+        prepared_instances = [
+            item for item in tqdm(
+                map(_prepare_instance_spec, instance_specs),
+                total=len(instance_specs),
+                desc=prep_desc,
             )
+        ]
+    else:
+        with concurrent.futures.ProcessPoolExecutor(max_workers=args.jobs) as executor:
+            prepared_instances = list(
+                tqdm(
+                    executor.map(_prepare_instance_spec, instance_specs, chunksize=1),
+                    total=len(instance_specs),
+                    desc=f"{prep_desc} ({args.jobs} jobs)",
+                )
+            )
+    jobs = list(_iter_jobs_from_prepared_instances(prepared_instances, base_seed))
+
+    out_path = Path(args.out)
+    checkpoint_path = out_path.with_suffix(".jsonl")
+    existing_run_ids: set[int] = set()
+    if not args.resume and checkpoint_path.exists():
+        checkpoint_path.unlink()
+    if args.resume and checkpoint_path.exists():
+        with open(checkpoint_path, "r", encoding="utf-8") as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                existing_run_ids.add(int(json.loads(line)["run_id"]))
+        print(
+            f"resuming from {checkpoint_path}; skipping {len(existing_run_ids)} completed rows"
         )
-    df = pd.DataFrame(rows)
-    actual_out = write_dataframe(df, args.out)
-    print(f"wrote {len(df)} rows to {actual_out}")
+
+    rows: list[dict] = []
+
+    def flush_rows() -> None:
+        nonlocal rows
+        if not rows:
+            return
+        ensure_parent(checkpoint_path)
+        with open(checkpoint_path, "a", encoding="utf-8") as f:
+            for row in rows:
+                f.write(dumps_json(row) + "\n")
+        last_run_id = rows[-1]["run_id"]
+        print(f"checkpoint: wrote through run_id={last_run_id} to {checkpoint_path}")
+        rows = []
+
+    pending_payloads = [
+        (run_id, exp, budget, alg_name, alg_cfg, theta, meta, alg_seed)
+        for run_id, (exp, _rep, budget, alg_name, alg_cfg, theta, meta, alg_seed) in enumerate(jobs)
+        if run_id not in existing_run_ids
+    ]
+    desc = f"running {config.get('name', Path(args.config).stem)}"
+    if args.jobs <= 1:
+        iterator = map(_execute_job, pending_payloads)
+        for row in tqdm(iterator, total=len(pending_payloads), initial=len(existing_run_ids), desc=desc):
+            rows.append(row)
+            if args.checkpoint_every > 0 and len(rows) >= args.checkpoint_every:
+                flush_rows()
+    else:
+        with concurrent.futures.ProcessPoolExecutor(max_workers=args.jobs) as executor:
+            iterator = executor.map(_execute_job, pending_payloads, chunksize=1)
+            for row in tqdm(
+                iterator,
+                total=len(pending_payloads),
+                initial=len(existing_run_ids),
+                desc=f"{desc} ({args.jobs} jobs)",
+            ):
+                rows.append(row)
+                if args.checkpoint_every > 0 and len(rows) >= args.checkpoint_every:
+                    flush_rows()
+    flush_rows()
+
+    if checkpoint_path.exists():
+        with open(checkpoint_path, "r", encoding="utf-8") as f:
+            final_rows = [json.loads(line) for line in f if line.strip()]
+        df = pd.DataFrame(final_rows).sort_values("run_id")
+        actual_out = write_dataframe(df, out_path)
+    else:
+        actual_out = checkpoint_path
+    print(f"wrote {len(jobs)} scheduled rows; output at {actual_out}")
 
 
 if __name__ == "__main__":

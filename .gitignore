@@ -56,3 +56,8 @@ Thumbs.db
 desktop.ini
 .vscode/
 .idea/
+
+# Synthetic report deliverable
+report/**
+!report/
+!report/*.pdf

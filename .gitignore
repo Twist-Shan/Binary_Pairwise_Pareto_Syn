@@ -1,0 +1,58 @@
+# Python caches and build artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Virtual environments and local dependency caches
+.venv/
+venv/
+env/
+ENV/
+.uv-cache/
+.pip-cache/
+
+# Jupyter/IPython local state
+.ipynb_checkpoints/
+.ipython/
+
+# Experiment outputs
+results/raw/*
+results/summary/*
+results/figures/*
+!results/raw/.gitkeep
+!results/summary/.gitkeep
+!results/figures/.gitkeep
+
+# Large/generated numeric artifacts
+*.parquet
+*.feather
+*.h5
+*.hdf5
+*.npy
+*.npz
+*.pkl
+*.pickle
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+~$*
+
+# OS/editor metadata
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/

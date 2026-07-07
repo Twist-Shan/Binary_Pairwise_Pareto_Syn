@@ -1,0 +1,72 @@
+name: fixed_confidence_benchmarks
+base_seed: 31415
+
+algorithms:
+  VB-EGE-practical:
+    delta: 0.05
+    sample_const: 2.0
+    threshold_const: 4.0
+    log_const: 4.0
+    max_phases: 40
+  UniformFocalBorda-FC:
+    delta: 0.05
+    sample_const: 2.0
+    threshold_const: 4.0
+    log_const: 4.0
+    max_phases: 40
+  UniformPairwiseBT-MLE-FC:
+    delta: 0.05
+    sample_const: 2.0
+    threshold_const: 4.0
+    log_const: 4.0
+    max_phases: 30
+    ridge_lambda: 1.0e-8
+    fallback_ridge_lambda: 1.0e-4
+    max_abs_theta: 20.0
+    max_iter: 1000
+    tol: 1.0e-9
+    allocation_scheme: balanced_random
+    mle_radius_scale: 1.0
+  UniformPairwiseBT-BordaPlugIn-FC:
+    delta: 0.05
+    sample_const: 2.0
+    threshold_const: 4.0
+    log_const: 4.0
+    max_phases: 40
+    allocation_scheme: balanced_random
+
+experiments:
+  - id: fc_convex2d
+    generator: convex_frontier_2d
+    params: {K: 60, d: 2, s: 15}
+    n_reps: 500
+
+  - id: fc_arena4_small
+    generator: arena_tradeoff_frontier
+    params: {K: 32, d: 4, s: 8, margin_low: 0.08, margin_high: 0.25, alpha: 0.7}
+    n_reps: 500
+
+  - id: fc_arena4_medium
+    generator: arena_tradeoff_frontier
+    params: {K: 64, d: 4, s: 12, margin_low: 0.08, margin_high: 0.25, alpha: 0.7}
+    n_reps: 300
+
+  - id: fc_arena10_medium
+    generator: arena_tradeoff_frontier
+    params: {K: 64, d: 10, s: 16, margin_low: 0.06, margin_high: 0.20, alpha: 0.7}
+    n_reps: 300
+
+  - id: fc_witness4
+    generator: unique_witness_d
+    params: {K: 40, d: 4, s: 8, q_per_p: 4, margin_low: 0.04, margin_high: 0.16}
+    n_reps: 500
+
+  - id: fc_witness10
+    generator: unique_witness_d
+    params: {K: 80, d: 10, s: 16, q_per_p: 4, margin_low: 0.035, margin_high: 0.14}
+    n_reps: 300
+
+  - id: fc_twogroup10_medium
+    generator: highdim_two_group
+    params: {K_low: 48, K_high: 16, d: 10}
+    n_reps: 300

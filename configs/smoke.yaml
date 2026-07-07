@@ -1,0 +1,58 @@
+name: smoke
+base_seed: 0
+budgets: [500, 1000, 2000, 5000]
+
+algorithms:
+  VB-EGE-practical:
+    delta: 0.10
+    sample_const: 1.0
+    threshold_const: 2.0
+    log_const: 4.0
+    max_phases: 20
+  UniformFocalBorda: {}
+  UniformFocalBorda-FC:
+    delta: 0.10
+    sample_const: 1.0
+    threshold_const: 2.0
+    log_const: 4.0
+    max_phases: 12
+  UniformPairwiseBT-MLE:
+    ridge_lambda: 1.0e-8
+    fallback_ridge_lambda: 1.0e-4
+    allocation_scheme: balanced_random
+  UniformPairwiseBT-MLE-FC:
+    delta: 0.10
+    sample_const: 1.0
+    threshold_const: 2.0
+    log_const: 4.0
+    max_phases: 10
+    ridge_lambda: 1.0e-8
+    fallback_ridge_lambda: 1.0e-4
+    allocation_scheme: balanced_random
+  UniformPairwiseBT-BordaPlugIn: {}
+  UniformPairwiseBT-BordaPlugIn-FC:
+    delta: 0.10
+    sample_const: 1.0
+    threshold_const: 2.0
+    log_const: 4.0
+    max_phases: 12
+    allocation_scheme: balanced_random
+  VB-EGE-capped:
+    delta: 0.10
+    sample_const: 1.0
+    threshold_const: 2.0
+    log_const: 4.0
+    max_phases: 20
+
+experiments:
+  - id: smoke_symmetric
+    generator: symmetric_hard
+    params: {K: 8, d: 2, Delta: 2.0}
+    n_reps: 20
+    algorithms: [VB-EGE-practical, UniformFocalBorda-FC, UniformPairwiseBT-MLE-FC, UniformPairwiseBT-BordaPlugIn-FC]
+
+  - id: smoke_arena
+    generator: arena_tradeoff_frontier
+    params: {K: 16, d: 4, s: 4, margin_low: 0.10, margin_high: 0.25, alpha: 0.7}
+    n_reps: 20
+    algorithms: [VB-EGE-practical, UniformFocalBorda-FC, UniformPairwiseBT-MLE-FC, UniformPairwiseBT-BordaPlugIn-FC]

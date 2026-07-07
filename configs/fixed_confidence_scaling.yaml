@@ -1,0 +1,71 @@
+name: fixed_confidence_scaling
+base_seed: 2026
+
+algorithms:
+  VB-EGE-practical:
+    delta: 0.05
+    sample_const: 2.0
+    threshold_const: 4.0
+    log_const: 4.0
+    max_phases: 40
+  UniformFocalBorda-FC:
+    delta: 0.05
+    sample_const: 2.0
+    threshold_const: 4.0
+    log_const: 4.0
+    max_phases: 40
+  UniformPairwiseBT-MLE-FC:
+    delta: 0.05
+    sample_const: 2.0
+    threshold_const: 4.0
+    log_const: 4.0
+    max_phases: 30
+    ridge_lambda: 1.0e-8
+    fallback_ridge_lambda: 1.0e-4
+    max_abs_theta: 20.0
+    allocation_scheme: balanced_random
+    mle_radius_scale: 1.0
+  UniformPairwiseBT-BordaPlugIn-FC:
+    delta: 0.05
+    sample_const: 2.0
+    threshold_const: 4.0
+    log_const: 4.0
+    max_phases: 40
+    allocation_scheme: balanced_random
+
+sweeps:
+  - id: fc_K_scaling_d4
+    generator: symmetric_hard
+    n_reps: 200
+    grid:
+      K: [16, 32, 64, 128]
+      d: [4]
+      Delta: [1.0]
+      delta: [0.05]
+
+  - id: fc_d_scaling_K64
+    generator: symmetric_hard
+    n_reps: 200
+    grid:
+      K: [64]
+      d: [2, 4, 10]
+      Delta: [1.0]
+      delta: [0.05]
+
+  - id: fc_gap_scaling_K64_d10
+    generator: symmetric_hard
+    n_reps: 200
+    grid:
+      K: [64]
+      d: [10]
+      Delta: [0.5, 0.75, 1.0, 1.25, 1.5]
+      delta: [0.05]
+
+  - id: fc_delta_scaling_K64_d10
+    generator: symmetric_hard
+    n_reps: 200
+    grid:
+      K: [64]
+      d: [10]
+      Delta: [1.0]
+      delta: [0.20, 0.10, 0.05, 0.02, 0.01]

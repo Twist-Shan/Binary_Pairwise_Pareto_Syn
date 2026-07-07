@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vb-ege-synthetic"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+  "numpy",
+  "pandas",
+  "scipy",
+  "matplotlib",
+  "pytest",
+  "pyyaml",
+  "tqdm",
+  "pyarrow",
+]
+
+[tool.setuptools.packages.find]
+include = ["vb_ege*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

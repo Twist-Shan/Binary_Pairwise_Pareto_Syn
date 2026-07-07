@@ -1,0 +1,50 @@
+name: arena_like
+base_seed: 4242
+
+algorithms:
+  VB-EGE-practical:
+    delta: 0.05
+    sample_const: 2.0
+    threshold_const: 4.0
+    log_const: 4.0
+    max_phases: 40
+  UniformFocalBorda-FC:
+    delta: 0.05
+    sample_const: 2.0
+    threshold_const: 4.0
+    log_const: 4.0
+    max_phases: 40
+  UniformPairwiseBT-MLE-FC:
+    delta: 0.05
+    sample_const: 2.0
+    threshold_const: 4.0
+    log_const: 4.0
+    max_phases: 30
+    ridge_lambda: 1.0e-8
+    fallback_ridge_lambda: 1.0e-4
+    max_abs_theta: 20.0
+    allocation_scheme: balanced_random
+    mle_radius_scale: 1.0
+  UniformPairwiseBT-BordaPlugIn-FC:
+    delta: 0.05
+    sample_const: 2.0
+    threshold_const: 4.0
+    log_const: 4.0
+    max_phases: 40
+    allocation_scheme: balanced_random
+
+experiments:
+  - id: arena_like_4d_32
+    generator: arena_tradeoff_frontier
+    params: {K: 32, d: 4, s: 8, margin_low: 0.08, margin_high: 0.25, alpha: 0.7}
+    n_reps: 500
+
+  - id: arena_like_10d_64
+    generator: arena_tradeoff_frontier
+    params: {K: 64, d: 10, s: 16, margin_low: 0.06, margin_high: 0.20, alpha: 0.7}
+    n_reps: 300
+
+  - id: arena_like_10d_128
+    generator: arena_tradeoff_frontier
+    params: {K: 128, d: 10, s: 24, margin_low: 0.06, margin_high: 0.20, alpha: 0.7}
+    n_reps: 200

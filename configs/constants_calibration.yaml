@@ -1,0 +1,48 @@
+name: constants_calibration
+base_seed: 271828
+
+algorithm: VB-EGE-practical-grid
+constant_grid:
+  sample_const: [0.5, 1.0, 2.0, 4.0]
+  threshold_const: [2.0, 3.0, 4.0, 6.0]
+  log_const: [4.0]
+
+delta: 0.05
+max_phases: 45
+
+reference_algorithms:
+  UniformFocalBorda-FC:
+    sample_const: 2.0
+    threshold_const: 4.0
+    log_const: 4.0
+    max_rounds: 45
+  UniformPairwiseBT-MLE-FC:
+    sample_const: 2.0
+    threshold_const: 4.0
+    log_const: 4.0
+    max_rounds: 45
+    ridge_lambda: 1.0e-8
+    fallback_ridge_lambda: 1.0e-4
+
+experiments:
+  - id: calib_symmetric_K64_d10
+    generator: symmetric_hard
+    params: {K: 64, d: 10, Delta: 1.0}
+    n_reps: 500
+
+  - id: calib_arena10_medium
+    generator: arena_tradeoff_frontier
+    params: {K: 64, d: 10, s: 16, margin_low: 0.06, margin_high: 0.20, alpha: 0.7}
+    n_reps: 300
+
+  - id: calib_witness10
+    generator: unique_witness_d
+    params: {K: 80, d: 10, s: 16, q_per_p: 4, margin_low: 0.035, margin_high: 0.14}
+    n_reps: 300
+
+plots:
+  - error_tau_frontier
+  - wilson_tau_frontier
+  - heatmap_mean_tau_by_constants
+  - heatmap_error_by_constants
+  - heatmap_stopped_fraction_by_constants

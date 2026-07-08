@@ -47,6 +47,8 @@ def _fc_config_from(config=None) -> FixedConfidenceBaselineConfig:
     if isinstance(config, FixedConfidenceBaselineConfig):
         return config
     cfg = dict(config or {})
+    if "max_rounds" in cfg and "max_phases" not in cfg:
+        cfg["max_phases"] = cfg["max_rounds"]
     allowed = set(FixedConfidenceBaselineConfig.__dataclass_fields__)
     cfg = {k: v for k, v in cfg.items() if k in allowed}
     if "delta" not in cfg:

@@ -117,6 +117,152 @@ def plot_stopping_scaling(summary_df, sweep_var, outpath):
     _savefig(outpath)
 
 
+def plot_tau_quantiles_vs_x(
+    summary_df,
+    x_col: str,
+    outpath,
+    *,
+    x_transform=None,
+    xlabel: str | None = None,
+    normalized: bool = False,
+):
+    y_cols = (
+        ("median_tau", "q90_tau", "q95_tau")
+        if not normalized
+        else ("mean_norm_tau_B", None, None)
+    )
+    required = [x_col, y_cols[0]]
+    df = summary_df.dropna(subset=required).copy()
+    if df.empty:
+        return
+    if x_transform is not None:
+        df["_x"] = x_transform(df[x_col].to_numpy(dtype=float))
+    else:
+        df["_x"] = df[x_col].astype(float)
+    ylabel = "median stopping time" if not normalized else "mean tau / (d H_B)"
+    plt.figure(figsize=(6.2, 4.2))
+    for algorithm, g in df.groupby("algorithm"):
+        g = g.sort_values("_x")
+        x = g["_x"].to_numpy(dtype=float)
+        y = g[y_cols[0]].to_numpy(dtype=float)
+        plt.plot(x, y, marker="o", label=algorithm)
+        if y_cols[1] and y_cols[2] and y_cols[1] in g and y_cols[2] in g:
+            lo = g[y_cols[1]].to_numpy(dtype=float)
+            hi = g[y_cols[2]].to_numpy(dtype=float)
+            plt.fill_between(x, lo, hi, alpha=0.12)
+    if (df["_x"] > 0).all() and (df[y_cols[0]] > 0).all():
+        plt.yscale("log")
+    plt.xlabel(xlabel or x_col)
+    plt.ylabel(ylabel)
+    plt.title(f"{_curve_title(df, ylabel)} vs {xlabel or x_col}")
+    plt.legend(fontsize=8)
+    _savefig(outpath)
+
+
+def plot_baseline_ratio_vs_x(summary_df, x_col: str, outpath, baseline="VB-EGE-practical"):
+    df = summary_df.dropna(subset=[x_col, "mean_tau"]).copy()
+    if df.empty or baseline not in set(df["algorithm"]):
+        return
+    rows = []
+    for key, g in df.groupby(x_col, dropna=False):
+        base = g[g["algorithm"] == baseline]
+        if base.empty:
+            continue
+        base_tau = float(base["mean_tau"].iloc[0])
+        if not np.isfinite(base_tau) or base_tau <= 0:
+            continue
+        for _, row in g.iterrows():
+            if row["algorithm"] == baseline:
+                continue
+            rows.append(
+                {
+                    x_col: key,
+                    "algorithm": row["algorithm"],
+                    "ratio": float(row["mean_tau"]) / base_tau,
+                }
+            )
+    if not rows:
+        return
+    r = pd.DataFrame(rows).sort_values(x_col)
+    plt.figure(figsize=(6.2, 4.2))
+    for algorithm, g in r.groupby("algorithm"):
+        plt.plot(g[x_col], g["ratio"], marker="o", label=algorithm)
+    plt.xscale("log" if (r[x_col] > 0).all() else "linear")
+    plt.yscale("log")
+    plt.xlabel(x_col)
+    plt.ylabel(f"mean tau / {baseline} mean tau")
+    plt.title(f"Baseline ratios vs {x_col}")
+    plt.legend(fontsize=8)
+    _savefig(outpath)
+
+
+def plot_metric_vs_x(summary_df, x_col: str, y_col: str, outpath, ylabel: str | None = None):
+    df = summary_df.dropna(subset=[x_col, y_col]).copy()
+    if df.empty:
+        return
+    plt.figure(figsize=(6.2, 4.2))
+    for algorithm, g in df.groupby("algorithm"):
+        g = g.sort_values(x_col)
+        plt.plot(g[x_col], g[y_col], marker="o", label=algorithm)
+    plt.xlabel(x_col)
+    plt.ylabel(ylabel or y_col)
+    plt.title(f"{ylabel or y_col} vs {x_col}")
+    plt.legend(fontsize=8)
+    _savefig(outpath)
+
+
+def plot_calibration_frontier(summary_df, outpath, y_col="error_rate"):
+    df = summary_df.dropna(subset=["mean_tau", y_col, "sample_const", "threshold_const"]).copy()
+    df = df[df["algorithm"] == "VB-EGE-practical"]
+    if df.empty:
+        return
+    plt.figure(figsize=(6.4, 4.4))
+    for exp_id, g in df.groupby("experiment_id"):
+        plt.scatter(g["mean_tau"], g[y_col], label=exp_id, alpha=0.8)
+        for _, row in g.iterrows():
+            if row["sample_const"] == 2.0 and row["threshold_const"] == 4.0:
+                plt.scatter(row["mean_tau"], row[y_col], marker="*", s=180, color="black")
+    plt.xscale("log")
+    if (df[y_col] > 0).any():
+        plt.yscale("log")
+    plt.xlabel("mean stopping time")
+    plt.ylabel(y_col)
+    plt.title(f"Constants calibration frontier: {y_col}")
+    plt.legend(fontsize=8)
+    _savefig(outpath)
+
+
+def plot_calibration_heatmap(summary_df, exp_id: str, metric: str, outpath):
+    df = summary_df[
+        (summary_df["experiment_id"] == exp_id)
+        & (summary_df["algorithm"] == "VB-EGE-practical")
+    ].dropna(subset=["sample_const", "threshold_const", metric])
+    if df.empty:
+        return
+    pivot = df.pivot_table(
+        index="threshold_const",
+        columns="sample_const",
+        values=metric,
+        aggfunc="mean",
+    ).sort_index(ascending=True)
+    if pivot.empty:
+        return
+    plt.figure(figsize=(5.8, 4.6))
+    values = pivot.to_numpy(dtype=float)
+    im = plt.imshow(values, origin="lower", aspect="auto")
+    plt.colorbar(im, label=metric)
+    plt.xticks(range(len(pivot.columns)), [str(x) for x in pivot.columns])
+    plt.yticks(range(len(pivot.index)), [str(x) for x in pivot.index])
+    plt.xlabel("sample_const")
+    plt.ylabel("threshold_const")
+    plt.title(f"{metric}: {exp_id}")
+    if 2.0 in pivot.columns and 4.0 in pivot.index:
+        x = list(pivot.columns).index(2.0)
+        y = list(pivot.index).index(4.0)
+        plt.scatter([x], [y], marker="*", s=220, color="white", edgecolor="black")
+    _savefig(outpath)
+
+
 def plot_allocation_vs_gap(result, true_gaps, outpath):
     N = np.asarray(result.N if hasattr(result, "N") else result["N"])
     gaps = np.asarray(true_gaps["delta"])

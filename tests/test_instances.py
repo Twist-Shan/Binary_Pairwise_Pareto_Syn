@@ -1,6 +1,7 @@
 from vb_ege.core import strict_pareto_set
 from vb_ege.instances import (
     arena_tradeoff_frontier,
+    correlated_arena_like,
     convex_frontier_2d,
     highdim_two_group,
     unique_witness_d,
@@ -29,3 +30,19 @@ def test_highdim_two_group_has_no_low_pareto_assumption_break():
 def test_convex_frontier_size():
     theta, _ = convex_frontier_2d(K=20, s=6, seed=3)
     assert len(strict_pareto_set(theta)) == 6
+
+
+def test_correlated_arena_target_pareto_size_and_metadata():
+    for rho in (0.0, 0.6, 0.9):
+        theta, meta = correlated_arena_like(
+            K=32,
+            d=4,
+            s=8,
+            rho=rho,
+            margin_low=0.08,
+            margin_high=0.25,
+            seed=int(100 * rho) + 4,
+        )
+        assert len(strict_pareto_set(theta)) == 8
+        assert meta["expected_pareto_size"] == 8
+        assert "achieved_objective_correlation_mean" in meta["params"]

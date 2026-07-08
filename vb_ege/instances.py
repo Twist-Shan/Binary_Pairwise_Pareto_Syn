@@ -35,11 +35,12 @@ def _pareto_anchors(
     alpha: float = 0.7,
     max_attempts: int = 10000,
 ) -> np.ndarray:
+    if d < 2 and s > 1:
+        raise ValueError("multiple Pareto anchors require d >= 2")
     for _ in range(max_attempts):
         z = rng.dirichlet(alpha * np.ones(d), size=s)
-        anchors = 0.15 + 0.75 * z / z.max(axis=1, keepdims=True)
-        anchors *= rng.uniform(0.94, 1.06, size=(s, 1))
-        anchors += rng.uniform(-0.005, 0.005, size=anchors.shape)
+        # A constant row sum makes strict dominance among distinct anchors impossible.
+        anchors = 0.15 + 0.75 * z
         if len(strict_pareto_set(anchors)) == s:
             return anchors
     raise RuntimeError("could not sample mutually non-dominated Pareto anchors")
@@ -114,6 +115,106 @@ def arena_tradeoff_frontier(
             assert len(strict_pareto_set(theta)) == s
             return theta, meta
     raise RuntimeError("could not generate arena_tradeoff_frontier with target Pareto size")
+
+
+def _rescale_columns(x: np.ndarray, low: float = 0.20, high: float = 0.90) -> np.ndarray:
+    x = np.asarray(x, dtype=float)
+    mins = x.min(axis=0, keepdims=True)
+    maxs = x.max(axis=0, keepdims=True)
+    span = maxs - mins
+    scaled = np.full_like(x, (low + high) / 2.0)
+    mask = span > 1e-12
+    scaled[:, mask.ravel()] = low + (high - low) * (
+        (x[:, mask.ravel()] - mins[:, mask.ravel()]) / span[:, mask.ravel()]
+    )
+    return scaled
+
+
+def _objective_correlation(theta: np.ndarray) -> tuple[float, list[float]]:
+    if theta.shape[1] < 2:
+        return float("nan"), []
+    corr = np.corrcoef(theta, rowvar=False)
+    offdiag = corr[np.triu_indices(theta.shape[1], k=1)]
+    offdiag = offdiag[np.isfinite(offdiag)]
+    return (float(offdiag.mean()) if offdiag.size else float("nan"), [float(x) for x in offdiag])
+
+
+def correlated_arena_like(
+    K: int,
+    d: int,
+    s: int,
+    rho: float,
+    margin_low: float,
+    margin_high: float,
+    latent_rank: int = 3,
+    alpha: float = 0.7,
+    scale: float = 1.0,
+    seed: int | None = None,
+    permute: bool = True,
+) -> tuple[np.ndarray, dict]:
+    rng = np.random.default_rng(seed)
+    if not 1 <= s <= K:
+        raise ValueError("s must satisfy 1 <= s <= K")
+    if not 0.0 <= rho <= 0.98:
+        raise ValueError("rho must be in [0, 0.98]")
+    if latent_rank < 1:
+        raise ValueError("latent_rank must be positive")
+
+    for _outer in range(2000):
+        common = rng.normal(size=(latent_rank, 1))
+        noise = rng.normal(size=(latent_rank, d))
+        A = np.sqrt(rho) * common @ np.ones((1, d)) + np.sqrt(1.0 - rho) * noise
+        norms = np.linalg.norm(A, axis=0, keepdims=True)
+        A = A / np.maximum(norms, 1e-12)
+
+        z = rng.dirichlet(alpha * np.ones(latent_rank), size=s)
+        raw = z @ A
+        theta_p = scale * _rescale_columns(raw, low=0.20, high=0.90)
+        theta_p *= rng.uniform(0.96, 1.04, size=(s, 1))
+        theta_p += rng.uniform(-0.003, 0.003, size=theta_p.shape)
+        if len(strict_pareto_set(theta_p)) != s:
+            continue
+
+        dominated = []
+        for _arm in range(K - s):
+            witness = rng.integers(0, s)
+            margin_common = rng.uniform(margin_low, margin_high)
+            margin_noise = rng.uniform(margin_low, margin_high, size=d)
+            margin = rho * margin_common + (1.0 - rho) * margin_noise
+            x = theta_p[witness] - margin
+            if not dominates_strict(theta_p[witness], x):
+                raise AssertionError("generated dominated arm is not dominated")
+            dominated.append(x)
+        theta = np.vstack([theta_p, np.asarray(dominated)])
+        if len(strict_pareto_set(theta)) != s:
+            continue
+        theta, perm = _permute(theta, rng, permute)
+        if len(strict_pareto_set(theta)) != s:
+            continue
+        corr_mean, corr_offdiag = _objective_correlation(theta)
+        meta = _meta(
+            "correlated_arena_like",
+            theta,
+            seed,
+            {
+                "K": K,
+                "d": d,
+                "s": s,
+                "rho": rho,
+                "latent_rank": latent_rank,
+                "margin_low": margin_low,
+                "margin_high": margin_high,
+                "alpha": alpha,
+                "scale": scale,
+                "permute": permute,
+                "achieved_objective_correlation_mean": corr_mean,
+                "achieved_objective_correlation_offdiag": corr_offdiag,
+            },
+            perm,
+        )
+        meta["expected_pareto_size"] = s
+        return theta, meta
+    raise RuntimeError("could not generate correlated_arena_like with target Pareto size")
 
 
 def unique_witness_d(
@@ -277,6 +378,7 @@ def boundary_equality_sanity(seed: int | None = None) -> tuple[np.ndarray, dict]
 GENERATORS: dict[str, Callable[..., tuple[np.ndarray, dict]]] = {
     "symmetric_hard": symmetric_hard,
     "arena_tradeoff_frontier": arena_tradeoff_frontier,
+    "correlated_arena_like": correlated_arena_like,
     "unique_witness_d": unique_witness_d,
     "highdim_two_group": highdim_two_group,
     "convex_frontier_2d": convex_frontier_2d,

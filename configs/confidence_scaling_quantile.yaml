@@ -1,0 +1,47 @@
+name: confidence_scaling_quantile
+base_seed: 314159
+
+algorithms:
+  VB-EGE-practical:
+    sample_const: 2.0
+    threshold_const: 4.0
+    log_const: 4.0
+    max_phases: 45
+  UniformFocalBorda-FC:
+    sample_const: 2.0
+    threshold_const: 4.0
+    log_const: 4.0
+    max_rounds: 45
+  UniformPairwiseBT-MLE-FC:
+    sample_const: 2.0
+    threshold_const: 4.0
+    log_const: 4.0
+    max_rounds: 45
+    ridge_lambda: 1.0e-8
+    fallback_ridge_lambda: 1.0e-4
+    allocation_scheme: balanced_random
+  UniformPairwiseBT-BordaPlugIn-FC:
+    sample_const: 2.0
+    threshold_const: 4.0
+    log_const: 4.0
+    max_rounds: 45
+    optional_if_runtime_exceeds_hours: 12
+
+experiments:
+  - id: conf_quantile_symmetric_K64_d10
+    generator: symmetric_hard
+    params: {K: 64, d: 10, Delta: 1.0}
+    n_reps: 500
+    delta_grid: [0.20, 0.10, 0.05, 0.02, 0.01, 0.005, 0.002, 0.001]
+
+  - id: conf_quantile_arena10_medium
+    generator: arena_tradeoff_frontier
+    params: {K: 64, d: 10, s: 16, margin_low: 0.06, margin_high: 0.20, alpha: 0.7}
+    n_reps: 300
+    delta_grid: [0.20, 0.10, 0.05, 0.02, 0.01, 0.005]
+
+plots:
+  - tau_quantiles_vs_log_inv_delta
+  - norm_tau_quantiles_vs_log_inv_delta
+  - tau_over_log_inv_delta
+  - final_phase_distribution_vs_delta

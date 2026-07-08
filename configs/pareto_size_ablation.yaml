@@ -1,0 +1,60 @@
+name: pareto_size_ablation
+base_seed: 424242
+
+algorithms:
+  VB-EGE-practical:
+    delta: 0.05
+    sample_const: 2.0
+    threshold_const: 4.0
+    log_const: 4.0
+    max_phases: 45
+  UniformFocalBorda-FC:
+    delta: 0.05
+    sample_const: 2.0
+    threshold_const: 4.0
+    log_const: 4.0
+    max_rounds: 45
+  UniformPairwiseBT-MLE-FC:
+    delta: 0.05
+    sample_const: 2.0
+    threshold_const: 4.0
+    log_const: 4.0
+    max_rounds: 45
+    ridge_lambda: 1.0e-8
+    fallback_ridge_lambda: 1.0e-4
+  UniformPairwiseBT-BordaPlugIn-FC:
+    delta: 0.05
+    sample_const: 2.0
+    threshold_const: 4.0
+    log_const: 4.0
+    max_rounds: 45
+    optional_for_d10: true
+
+experiments:
+  - id: pareto_size_arena4_K64
+    generator: arena_tradeoff_frontier
+    n_reps: 300
+    grid:
+      K: [64]
+      d: [4]
+      s: [4, 8, 16, 32]
+      margin_low: [0.08]
+      margin_high: [0.25]
+      alpha: [0.7]
+
+  - id: pareto_size_arena10_K64
+    generator: arena_tradeoff_frontier
+    n_reps: 300
+    grid:
+      K: [64]
+      d: [10]
+      s: [4, 8, 16, 32]
+      margin_low: [0.06]
+      margin_high: [0.20]
+      alpha: [0.7]
+
+plots:
+  - tau_vs_pareto_size
+  - norm_tau_vs_pareto_size
+  - baseline_ratio_vs_pareto_size
+  - accepted_rejected_phase_profile

@@ -56,10 +56,38 @@ def _algorithm_jobs(config: dict, exp: dict) -> list[tuple[str, dict]]:
             (config.get("algorithm", "UniformPairwiseBT-MLE"), cfg)
             for cfg in _mle_grid_product(config["mle_grid"])
         ]
+    if "constant_grid" in config:
+        jobs: list[tuple[str, dict]] = []
+        for cfg in _grid_product(config["constant_grid"]):
+            run_cfg = {
+                **cfg,
+                "delta": config.get("delta", 0.05),
+                "max_phases": config.get("max_phases", 60),
+            }
+            jobs.append(("VB-EGE-practical", run_cfg))
+        for name, cfg in config.get("reference_algorithms", {}).items():
+            ref_cfg = dict(cfg or {})
+            ref_cfg.setdefault("delta", config.get("delta", 0.05))
+            jobs.append((name, ref_cfg))
+        return jobs
     algs = exp.get("algorithms", config.get("algorithms", {}))
     if isinstance(algs, list):
         return [(name, config.get("algorithms", {}).get(name, {})) for name in algs]
     return [(name, cfg or {}) for name, cfg in algs.items()]
+
+
+def _expanded_experiment_cells(exp: dict) -> list[tuple[dict, float | None, str]]:
+    if "grid" in exp:
+        params_list = _grid_product(exp["grid"])
+    else:
+        params_list = [dict(exp.get("params", {}))]
+    deltas = exp.get("delta_grid", [exp.get("delta")])
+    cells = []
+    for params in params_list:
+        for delta in deltas:
+            seed_extra = dumps_json({"params": params, "delta": delta})
+            cells.append((params, delta, seed_extra))
+    return cells
 
 
 def _run_algorithm(name: str, theta, budget, cfg: dict, rng):
@@ -173,6 +201,10 @@ def _row_from_result(
         "num_rejected": result.get("num_rejected"),
         "pareto_size_true": len(true_pareto),
         "pareto_size_hat": len(recommended),
+        "pareto_target": meta.get("expected_pareto_size"),
+        "achieved_objective_correlation": meta["params"].get(
+            "achieved_objective_correlation_mean"
+        ),
         "H_B": gaps_B["H"],
         "H_theta": gaps_theta["H"],
         "delta_min_B": gaps_B["delta_min"],
@@ -200,11 +232,20 @@ def _row_from_result(
 
 def _iter_experiment_instance_specs(config: dict, base_seed: int):
     for exp in config.get("experiments", []):
+        if exp.get("optional", False):
+            continue
         budgets = exp.get("budgets", config.get("budgets", [None]))
-        alg_jobs = _algorithm_jobs(config, exp)
-        for rep in range(int(exp.get("n_reps", 1))):
-            inst_seed = stable_seed(base_seed, exp["id"], rep, "instance")
-            yield "experiment", exp, rep, budgets, alg_jobs, inst_seed, None
+        for params, delta, seed_extra in _expanded_experiment_cells(exp):
+            cell_exp = {**exp, "params": params}
+            alg_jobs = []
+            for alg_name, alg_cfg in _algorithm_jobs(config, exp):
+                run_cfg = dict(alg_cfg or {})
+                if delta is not None:
+                    run_cfg["delta"] = delta
+                alg_jobs.append((alg_name, run_cfg))
+            for rep in range(int(exp.get("n_reps", 1))):
+                inst_seed = stable_seed(base_seed, exp["id"], seed_extra, rep, "instance")
+                yield "experiment", cell_exp, rep, budgets, alg_jobs, inst_seed, seed_extra
 
 
 def _iter_sweep_instance_specs(config: dict, base_seed: int):
@@ -245,7 +286,15 @@ def _iter_jobs_from_prepared_instances(prepared_instances, base_seed: int):
                 for budget in alg_budgets:
                     if budget is None and alg_name not in FIXED_CONFIDENCE_ALGORITHMS:
                         continue
-                    alg_seed = stable_seed(base_seed, exp["id"], rep, budget, alg_name, dumps_json(alg_cfg))
+                    alg_seed = stable_seed(
+                        base_seed,
+                        exp["id"],
+                        seed_extra,
+                        rep,
+                        budget,
+                        alg_name,
+                        dumps_json(alg_cfg),
+                    )
                     yield exp, rep, budget, alg_name, alg_cfg, theta, meta, alg_seed
             else:
                 alg_seed = stable_seed(base_seed, exp["id"], seed_extra, rep, alg_name)

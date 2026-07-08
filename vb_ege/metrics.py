@@ -81,7 +81,14 @@ def summarize_runs(df: pd.DataFrame) -> pd.DataFrame:
                 "q90_tau": _nanquantile(g.get("tau", pd.Series(dtype=float)), 0.90),
                 "q95_tau": _nanquantile(g.get("tau", pd.Series(dtype=float)), 0.95),
                 "q99_tau": _nanquantile(g.get("tau", pd.Series(dtype=float)), 0.99),
+                "mean_stopped": _nanmean(g.get("stopped", pd.Series(dtype=float))),
                 "mean_hamming": _nanmean(g.get("hamming", pd.Series(dtype=float))),
+                "mean_pareto_size_true": _nanmean(
+                    g.get("pareto_size_true", pd.Series(dtype=float))
+                ),
+                "mean_pareto_target": _nanmean(
+                    g.get("pareto_target", pd.Series(dtype=float))
+                ),
                 "mean_pareto_size_hat": _nanmean(
                     g.get("pareto_size_hat", pd.Series(dtype=float))
                 ),
@@ -123,11 +130,20 @@ def summarize_runs(df: pd.DataFrame) -> pd.DataFrame:
                 "mean_pair_cell_coverage": _nanmean(
                     g.get("pair_cell_coverage", pd.Series(dtype=float))
                 ),
+                "mean_achieved_objective_correlation": _nanmean(
+                    g.get("achieved_objective_correlation", pd.Series(dtype=float))
+                ),
                 "mean_false_positive_count": _nanmean(
                     g.get("false_positive_count", pd.Series(dtype=float))
                 ),
                 "mean_false_negative_count": _nanmean(
                     g.get("false_negative_count", pd.Series(dtype=float))
+                ),
+                "median_final_phase": _nanquantile(
+                    g.get("num_phases", pd.Series(dtype=float)), 0.50
+                ),
+                "q95_final_phase": _nanquantile(
+                    g.get("num_phases", pd.Series(dtype=float)), 0.95
                 ),
             }
         )

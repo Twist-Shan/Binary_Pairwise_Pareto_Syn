@@ -54,7 +54,7 @@ def plot_borda_embedding_2d(theta, outpath):
 def _curve_title(df: pd.DataFrame, y: str) -> str:
     row = df.iloc[0]
     n_reps = int(df["n_reps"].max()) if "n_reps" in df else len(df)
-    return f"{row.get('experiment_id', '')}: K={row.get('K', '')}, d={row.get('d', '')}, reps={n_reps}, {y}"
+    return f"K={row.get('K', '')}, d={row.get('d', '')}, reps={n_reps}, {y}"
 
 
 def plot_budget_curve(summary_df, outpath, x="budget"):
@@ -154,7 +154,7 @@ def plot_tau_quantiles_vs_x(
         plt.yscale("log")
     plt.xlabel(xlabel or x_col)
     plt.ylabel(ylabel)
-    plt.title(f"{_curve_title(df, ylabel)} vs {xlabel or x_col}")
+    plt.title(f"{_curve_title(df, ylabel)} vs {xlabel or x_col}", fontsize=9)
     plt.legend(fontsize=8)
     _savefig(outpath)
 

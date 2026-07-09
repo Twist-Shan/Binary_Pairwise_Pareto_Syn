@@ -57,6 +57,20 @@ def _curve_title(df: pd.DataFrame, y: str) -> str:
     return f"K={row.get('K', '')}, d={row.get('d', '')}, reps={n_reps}, {y}"
 
 
+def _short_series_label(value) -> str:
+    s = str(value)
+    lower = s.lower()
+    if "arena10" in lower:
+        return "Arena-10"
+    if "arena4" in lower:
+        return "Arena-4"
+    if "witness10" in lower:
+        return "Witness-10"
+    if "symmetric" in lower:
+        return "Symmetric"
+    return s
+
+
 def plot_budget_curve(summary_df, outpath, x="budget"):
     df = summary_df.dropna(subset=[x, "error_rate"]).copy()
     if df.empty:
@@ -96,6 +110,44 @@ def plot_hamming_curve(summary_df, outpath):
     plt.xlabel("budget")
     plt.ylabel("mean symmetric-difference distance")
     plt.title(_curve_title(df, "hamming"))
+    plt.legend(fontsize=8)
+    _savefig(outpath)
+
+
+def plot_budget_ratio_curve(
+    summary_df,
+    outpath,
+    y_col: str,
+    ylabel: str,
+    *,
+    log10_floor: bool = False,
+):
+    required = ["budget", "meta_tau_ref", y_col]
+    df = summary_df.dropna(subset=required).copy()
+    if df.empty:
+        return
+    df["_budget_ratio"] = df["budget"].astype(float) / df["meta_tau_ref"].astype(float)
+    if log10_floor:
+        if "n_reps" not in df:
+            return
+        y = np.maximum(
+            df[y_col].to_numpy(dtype=float),
+            0.5 / df["n_reps"].to_numpy(dtype=float),
+        )
+        df["_y"] = np.log10(y)
+    else:
+        df["_y"] = df[y_col].astype(float)
+    df = df.replace([np.inf, -np.inf], np.nan).dropna(subset=["_budget_ratio", "_y"])
+    if df.empty:
+        return
+    plt.figure(figsize=(6.2, 4.2))
+    for algorithm, g in df.groupby("algorithm", dropna=False):
+        g = g.sort_values("_budget_ratio")
+        plt.plot(g["_budget_ratio"], g["_y"], marker="o", label=str(algorithm))
+    plt.xscale("log")
+    plt.xlabel("budget / default VB-EGE mean tau")
+    plt.ylabel(ylabel)
+    plt.title(f"{ylabel} vs under-budget ratio")
     plt.legend(fontsize=8)
     _savefig(outpath)
 
@@ -163,8 +215,15 @@ def plot_baseline_ratio_vs_x(summary_df, x_col: str, outpath, baseline="VB-EGE-p
     df = summary_df.dropna(subset=[x_col, "mean_tau"]).copy()
     if df.empty or baseline not in set(df["algorithm"]):
         return
+    group_cols = [x_col]
+    multi_setting = "experiment_id" in df and df["experiment_id"].nunique(dropna=True) > 1
+    if multi_setting:
+        group_cols = ["experiment_id", x_col]
     rows = []
-    for key, g in df.groupby(x_col, dropna=False):
+    for key, g in df.groupby(group_cols, dropna=False):
+        if not isinstance(key, tuple):
+            key = (key,)
+        key_map = dict(zip(group_cols, key))
         base = g[g["algorithm"] == baseline]
         if base.empty:
             continue
@@ -176,7 +235,8 @@ def plot_baseline_ratio_vs_x(summary_df, x_col: str, outpath, baseline="VB-EGE-p
                 continue
             rows.append(
                 {
-                    x_col: key,
+                    x_col: key_map[x_col],
+                    "experiment_id": key_map.get("experiment_id", ""),
                     "algorithm": row["algorithm"],
                     "ratio": float(row["mean_tau"]) / base_tau,
                 }
@@ -185,8 +245,19 @@ def plot_baseline_ratio_vs_x(summary_df, x_col: str, outpath, baseline="VB-EGE-p
         return
     r = pd.DataFrame(rows).sort_values(x_col)
     plt.figure(figsize=(6.2, 4.2))
-    for algorithm, g in r.groupby("algorithm"):
-        plt.plot(g[x_col], g["ratio"], marker="o", label=algorithm)
+    plot_groups = (
+        r.groupby(["algorithm", "experiment_id"], dropna=False)
+        if multi_setting
+        else r.groupby("algorithm", dropna=False)
+    )
+    for key, g in plot_groups:
+        if isinstance(key, tuple):
+            algorithm, exp_id = key
+            label = f"{algorithm} ({_short_series_label(exp_id)})"
+        else:
+            label = key
+        g = g.sort_values(x_col)
+        plt.plot(g[x_col], g["ratio"], marker="o", label=label)
     plt.xscale("log" if (r[x_col] > 0).all() else "linear")
     plt.yscale("log")
     plt.xlabel(x_col)
@@ -196,14 +267,34 @@ def plot_baseline_ratio_vs_x(summary_df, x_col: str, outpath, baseline="VB-EGE-p
     _savefig(outpath)
 
 
-def plot_metric_vs_x(summary_df, x_col: str, y_col: str, outpath, ylabel: str | None = None):
+def plot_metric_vs_x(
+    summary_df,
+    x_col: str,
+    y_col: str,
+    outpath,
+    ylabel: str | None = None,
+    series_col: str | None = None,
+):
     df = summary_df.dropna(subset=[x_col, y_col]).copy()
     if df.empty:
         return
     plt.figure(figsize=(6.2, 4.2))
-    for algorithm, g in df.groupby("algorithm"):
+    group_cols = ["algorithm"]
+    if series_col and series_col in df and df[series_col].nunique(dropna=True) > 1:
+        group_cols.append(series_col)
+    for key, g in df.groupby(group_cols, dropna=False):
+        if isinstance(key, tuple):
+            algorithm = key[0]
+            series = key[1] if len(key) > 1 else None
+            label = (
+                f"{algorithm} ({_short_series_label(series)})"
+                if series is not None
+                else str(algorithm)
+            )
+        else:
+            label = str(key)
         g = g.sort_values(x_col)
-        plt.plot(g[x_col], g[y_col], marker="o", label=algorithm)
+        plt.plot(g[x_col], g[y_col], marker="o", label=label)
     plt.xlabel(x_col)
     plt.ylabel(ylabel or y_col)
     plt.title(f"{ylabel or y_col} vs {x_col}")
@@ -314,19 +405,59 @@ def plot_mle_sign_accuracy(summary_df, outpath):
 
 
 def plot_pair_cell_coverage_effect(summary_df, outpath):
-    df = summary_df.dropna(subset=["mean_pair_cell_coverage", "error_rate"]).copy()
-    df = df[df["algorithm"].astype(str).str.contains("Pairwise", na=False)]
-    if df.empty:
+    df = summary_df.dropna(subset=["mean_tau"]).copy()
+    if df.empty or "mean_pair_cell_coverage" not in df:
         return
+    param_cols = [
+        c
+        for c in df.columns
+        if c.startswith("param_")
+        and not c.startswith("param_achieved_objective_correlation")
+    ]
+    setting_cols = [
+        c
+        for c in ["experiment_id", "K", "d", "budget", "delta"]
+        if c in df.columns
+    ] + param_cols
+
+    def key_from(row):
+        key = []
+        for col in setting_cols:
+            val = row.get(col)
+            if pd.isna(val):
+                val = "<NA>"
+            key.append(val)
+        return tuple(key)
+
+    vb_rows = df[df["algorithm"] == "VB-EGE-practical"]
+    vb_tau = {key_from(row): float(row["mean_tau"]) for _, row in vb_rows.iterrows()}
+    rows = []
+    pairwise = df[df["algorithm"].astype(str).str.contains("Pairwise", na=False)]
+    pairwise = pairwise.dropna(subset=["mean_pair_cell_coverage"])
+    for _, row in pairwise.iterrows():
+        base_tau = vb_tau.get(key_from(row))
+        tau = float(row["mean_tau"])
+        coverage = float(row["mean_pair_cell_coverage"])
+        if not base_tau or base_tau <= 0 or tau <= 0 or coverage <= 0:
+            continue
+        rows.append(
+            {
+                "algorithm": row["algorithm"],
+                "coverage": coverage,
+                "ratio": tau / base_tau,
+            }
+        )
+    if not rows:
+        return
+    plot_df = pd.DataFrame(rows)
     plt.figure(figsize=(6.0, 4.2))
-    for algorithm, g in df.groupby("algorithm"):
-        g = g.sort_values("mean_pair_cell_coverage")
-        floor = np.maximum(g["error_rate"].to_numpy(dtype=float), 0.5 / g["n_reps"].to_numpy(dtype=float))
-        plt.plot(g["mean_pair_cell_coverage"], np.log10(floor), marker="o", label=algorithm)
+    for algorithm, g in plot_df.groupby("algorithm"):
+        plt.scatter(g["coverage"], g["ratio"], label=algorithm, alpha=0.8, s=28)
     plt.xscale("log")
-    plt.xlabel("pair-cell coverage")
-    plt.ylabel("log10(error rate floor)")
-    plt.title("Pair-cell coverage effect")
+    plt.yscale("log")
+    plt.xlabel("mean pair-cell coverage")
+    plt.ylabel("mean stopping time / VB-EGE")
+    plt.title("Pairwise coverage cost")
     plt.axvline(1.0, color="black", linestyle=":", linewidth=1.0)
     plt.legend(fontsize=8)
     _savefig(outpath)

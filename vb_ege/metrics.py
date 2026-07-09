@@ -56,10 +56,25 @@ def summarize_runs(df: pd.DataFrame) -> pd.DataFrame:
         "mle_init",
         "mle_allocation_scheme",
     ]
-    param_cols = sorted(c for c in df.columns if c.startswith("param_"))
-    group_cols = [c for c in preferred if c in df.columns] + param_cols
+    # Achieved quantities are run metadata, not design parameters.  In
+    # particular, correlated-arena instances have a different achieved
+    # correlation for each seed; grouping by it would split a 300-rep cell
+    # into many one-rep summaries.
+    param_cols = sorted(
+        c
+        for c in df.columns
+        if c.startswith("param_")
+        and not c.startswith("param_achieved_objective_correlation")
+    )
+    meta_cols = sorted(c for c in df.columns if c.startswith("meta_"))
+    group_cols = [c for c in preferred if c in df.columns] + param_cols + meta_cols
     if not group_cols:
         raise ValueError("no grouping columns found")
+    if "seed" in df.columns:
+        dedupe_cols = group_cols + ["seed"]
+        if "run_id" in df.columns:
+            df = df.sort_values("run_id")
+        df = df.drop_duplicates(dedupe_cols, keep="last")
 
     records: list[dict] = []
     for key, g in df.groupby(group_cols, dropna=False):

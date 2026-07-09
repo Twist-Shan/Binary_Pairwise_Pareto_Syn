@@ -12,6 +12,7 @@ from .io_utils import ensure_parent
 from .metrics import loglog_slope, summarize_runs
 from .plotting import (
     plot_baseline_ratio_vs_x,
+    plot_budget_ratio_curve,
     plot_budget_curve,
     plot_budget_curve_normalized,
     plot_calibration_frontier,
@@ -79,6 +80,8 @@ def _suffix_for_exp(exp_id: str) -> str:
         return "arena10"
     if "arena4" in exp_id:
         return "arena4"
+    if "witness10" in exp_id:
+        return "witness10"
     return exp_id
 
 
@@ -231,14 +234,33 @@ def _write_special_figures(summary: pd.DataFrame, figdir: Path, out: Path) -> No
             "mean_pair_cell_coverage",
             figdir / "pair_cell_coverage_vs_rho.pdf",
             ylabel="mean pair-cell coverage",
+            series_col="experiment_id",
         )
+        vb = summary[summary["algorithm"] == "VB-EGE-practical"]
         plot_metric_vs_x(
-            summary,
+            vb,
             "param_rho",
             "mean_delta_min_B",
             figdir / "delta_min_B_vs_rho.pdf",
             ylabel="mean Borda delta_min",
+            series_col="experiment_id",
         )
+    elif name == "under_budget_stress":
+        for exp_id, g in summary.groupby("experiment_id"):
+            suffix = _suffix_for_exp(exp_id)
+            plot_budget_ratio_curve(
+                g,
+                figdir / f"error_vs_budget_ratio_{suffix}.pdf",
+                "error_rate",
+                "log10(error rate floor)",
+                log10_floor=True,
+            )
+            plot_budget_ratio_curve(
+                g,
+                figdir / f"hamming_vs_budget_ratio_{suffix}.pdf",
+                "mean_hamming",
+                "mean symmetric-difference distance",
+            )
 
 
 def main(argv=None):

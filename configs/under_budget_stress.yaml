@@ -1,0 +1,39 @@
+name: under_budget_stress
+base_seed: 271828
+
+algorithms:
+  VB-EGE-capped:
+    delta: 0.05
+    sample_const: 2.0
+    threshold_const: 4.0
+    log_const: 4.0
+    max_phases: 40
+  UniformFocalBorda: {}
+  UniformPairwiseBT-MLE:
+    ridge_lambda: 1.0e-8
+    fallback_ridge_lambda: 1.0e-4
+    max_abs_theta: 20.0
+    max_iter: 1000
+    tol: 1.0e-9
+    allocation_scheme: balanced_random
+  UniformPairwiseBT-BordaPlugIn:
+    allocation_scheme: balanced_random
+
+experiments:
+  - id: ub_arena10_medium
+    generator: arena_tradeoff_frontier
+    params: {K: 64, d: 10, s: 16, margin_low: 0.06, margin_high: 0.20, alpha: 0.7}
+    metadata: {tau_ref: 978973475.9333332, tau_ref_source: fc_arena10_medium}
+    n_reps: 300
+    budgets: [19579470, 48948674, 97897348, 195794695, 489486738, 978973476]
+
+  - id: ub_witness10
+    generator: unique_witness_d
+    params: {K: 80, d: 10, s: 16, q_per_p: 4, margin_low: 0.035, margin_high: 0.14}
+    metadata: {tau_ref: 1606669122.7, tau_ref_source: fc_witness10}
+    n_reps: 300
+    budgets: [32133382, 80333456, 160666912, 321333825, 803334561, 1606669123]
+
+plots:
+  - error_vs_budget_ratio
+  - hamming_vs_budget_ratio

@@ -7,6 +7,7 @@ import concurrent.futures
 import itertools
 import json
 import math
+import time
 from dataclasses import asdict
 from pathlib import Path
 
@@ -82,10 +83,14 @@ def _expanded_experiment_cells(exp: dict) -> list[tuple[dict, float | None, str]
     else:
         params_list = [dict(exp.get("params", {}))]
     deltas = exp.get("delta_grid", [exp.get("delta")])
+    pair_delta_instances = bool(exp.get("paired_delta_instances", False))
     cells = []
     for params in params_list:
         for delta in deltas:
-            seed_extra = dumps_json({"params": params, "delta": delta})
+            seed_payload = {"params": params}
+            if not pair_delta_instances:
+                seed_payload["delta"] = delta
+            seed_extra = dumps_json(seed_payload)
             cells.append((params, delta, seed_extra))
     return cells
 
@@ -143,6 +148,7 @@ def _row_from_result(
     seed: int,
     algorithm: str,
     exp_id: str,
+    experiment_metadata: dict,
     theta,
     meta,
     budget,
@@ -227,6 +233,9 @@ def _row_from_result(
     for key, val in meta["params"].items():
         if isinstance(val, (int, float, str, bool)):
             row[f"param_{key}"] = val
+    for key, val in (experiment_metadata or {}).items():
+        if isinstance(val, (int, float, str, bool)):
+            row[f"meta_{key}"] = val
     return row
 
 
@@ -310,6 +319,7 @@ def _execute_job(payload) -> dict:
         alg_seed,
         alg_name,
         exp["id"],
+        dict(exp.get("metadata", {})),
         theta,
         meta,
         budget,
@@ -375,9 +385,16 @@ def main(argv=None):
         if not rows:
             return
         ensure_parent(checkpoint_path)
-        with open(checkpoint_path, "a", encoding="utf-8") as f:
-            for row in rows:
-                f.write(dumps_json(row) + "\n")
+        for attempt in range(8):
+            try:
+                with open(checkpoint_path, "a", encoding="utf-8") as f:
+                    for row in rows:
+                        f.write(dumps_json(row) + "\n")
+                break
+            except PermissionError:
+                if attempt == 7:
+                    raise
+                time.sleep(0.25 * (attempt + 1))
         last_run_id = rows[-1]["run_id"]
         print(f"checkpoint: wrote through run_id={last_run_id} to {checkpoint_path}")
         rows = []
@@ -388,18 +405,19 @@ def main(argv=None):
         if run_id not in existing_run_ids
     ]
     desc = f"running {config.get('name', Path(args.config).stem)}"
+    progress_total = len(existing_run_ids) + len(pending_payloads)
     if args.jobs <= 1:
         iterator = map(_execute_job, pending_payloads)
-        for row in tqdm(iterator, total=len(pending_payloads), initial=len(existing_run_ids), desc=desc):
+        for row in tqdm(iterator, total=progress_total, initial=len(existing_run_ids), desc=desc):
             rows.append(row)
             if args.checkpoint_every > 0 and len(rows) >= args.checkpoint_every:
                 flush_rows()
     else:
         with concurrent.futures.ProcessPoolExecutor(max_workers=args.jobs) as executor:
-            iterator = executor.map(_execute_job, pending_payloads, chunksize=1)
+            futures = [executor.submit(_execute_job, payload) for payload in pending_payloads]
             for row in tqdm(
-                iterator,
-                total=len(pending_payloads),
+                (future.result() for future in concurrent.futures.as_completed(futures)),
+                total=progress_total,
                 initial=len(existing_run_ids),
                 desc=f"{desc} ({args.jobs} jobs)",
             ):

@@ -32,12 +32,14 @@ experiments:
     generator: symmetric_hard
     params: {K: 64, d: 10, Delta: 1.0}
     n_reps: 500
+    paired_delta_instances: true
     delta_grid: [0.20, 0.10, 0.05, 0.02, 0.01, 0.005, 0.002, 0.001]
 
   - id: conf_quantile_arena10_medium
     generator: arena_tradeoff_frontier
     params: {K: 64, d: 10, s: 16, margin_low: 0.06, margin_high: 0.20, alpha: 0.7}
     n_reps: 300
+    paired_delta_instances: true
     delta_grid: [0.20, 0.10, 0.05, 0.02, 0.01, 0.005]
 
 plots:

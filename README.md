@@ -25,15 +25,17 @@ It preserves coordinate-wise order, so the strict Pareto set of `b` is the same 
 
 The main fixed-confidence algorithm is `VB-EGE-practical`, implemented in `vb_ege.algorithms`. It samples focal-arm Borda observations and accepts or rejects arms by empirical active-set Pareto gaps. Practical constants are exposed in YAML configs; larger theory-style constants can be supplied through `VBEGEConfig`.
 
-The main fixed-confidence benchmark methods are:
+The main comparison methods are:
 
 - `UniformFocalBorda-FC`: uniformly samples arm-coordinate focal Borda cells in rounds and stops when the empirical Pareto gap clears the confidence radius.
-- `UniformPairwiseBT-MLE-FC`: uniformly samples pair-coordinate Bradley-Terry comparisons in rounds, fits a separate BT MLE for each coordinate, fixes the gauge by centering, and stops when the empirical latent gap clears the confidence radius.
+- `UniformPairwiseBT-MLE-Cert`: uniformly samples pair-coordinate Bradley-Terry comparisons in rounds, fits a separate BT MLE for each coordinate, fixes the gauge by centering, and stops with an empirical plug-in certificate. This is a fixed-confidence-style stopping heuristic, not a proved delta-correct MLE confidence procedure.
 - `UniformPairwiseBT-BordaPlugIn-FC`: uniformly samples pair-coordinate comparisons in rounds, estimates pairwise probabilities with add-1/2 smoothing, plugs them into Borda means, and stops by the same empirical-gap certificate.
+
+Revised randomized headline benchmarks use a hierarchical design: a fixed bank of latent `theta` instances is reused across observation replications and algorithms. Every revised raw row stores `instance_id`, `theta_hash`, `instance_index`, and `observation_replicate`. The Arena-10 benchmark, constant-sensitivity sweep, and under-budget diagnostic share the versioned `arena10_medium_v2` bank. The confidence sweep retains its own paired-delta bank so every delta value within a replication uses the same instance.
 
 The repo also keeps fixed-budget methods (`UniformFocalBorda`, `UniformPairwiseBT-MLE`, `UniformPairwiseBT-BordaPlugIn`) and `VB-EGE-capped` for budget-curve ablations. `VB-EGE-capped` is a heuristic comparator, not the fixed-confidence theorem.
 
-`UniformPairwiseBT-MLE-FC` includes ridge stabilization. If the comparison graph is disconnected, optimization fails, or the estimate exceeds `max_abs_theta`, it reruns with `fallback_ridge_lambda` and records fallback metadata.
+`UniformPairwiseBT-MLE-Cert` includes ridge stabilization. If the comparison graph is disconnected, optimization fails, or the estimate exceeds `max_abs_theta`, it reruns with `fallback_ridge_lambda` and records fallback metadata.
 
 ## Layout
 
@@ -83,6 +85,13 @@ python -m vb_ege.run_sweep --config configs/fixed_confidence_benchmarks.yaml --o
 python -m vb_ege.summarize --raw results/raw/fixed_confidence_benchmarks.parquet --out results/summary/fixed_confidence_benchmarks_summary.csv --figdir results/figures/fixed_confidence_benchmarks
 ```
 
+Theory/practical constants sanity check:
+
+```bash
+python -m vb_ege.run_sweep --config configs/theory_constants_sanity.yaml --out results/raw/theory_constants_sanity.parquet --seed 20260708
+python -m vb_ege.summarize --raw results/raw/theory_constants_sanity.parquet --out results/summary/theory_constants_sanity_summary.csv --figdir results/figures/theory_constants_sanity
+```
+
 MLE ablation:
 
 ```bash
@@ -101,4 +110,4 @@ python -m vb_ege.summarize --raw results/raw/arena_like.parquet --out results/su
 
 Raw rows include the true and recommended Pareto sets, error, Hamming distance, stopping time, Borda and latent gaps, `tau / (d * H_B)`, pair-cell count and coverage, MLE convergence metadata, ridge fallback metadata, centered theta RMSE, and pairwise sign accuracy.
 
-Summaries report error rates with Wilson intervals, stopping-time quantiles, mean Hamming distance, false positives and false negatives, MLE diagnostics, and pair-cell coverage. For fixed-confidence configs, `tau_by_algorithm_<experiment>.pdf` is the main comparison plot. Plots are written as both PDF and PNG.
+Summaries report error rates with Wilson intervals, stopping-time quantiles, mean Hamming distance, false positives and false negatives, MLE diagnostics, and pair-cell coverage. They also write `<summary>_paired.csv`, containing median per-replication baseline/VB stopping-time ratios and 95% bootstrap intervals. For fixed-confidence configs, `tau_by_algorithm_<experiment>.pdf` shows median stopping time with interquartile error bars. Plots are written as both PDF and PNG.

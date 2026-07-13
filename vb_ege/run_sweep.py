@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures
+import hashlib
 import itertools
 import json
 import math
@@ -36,8 +37,10 @@ pd = import_pandas_quietly()
 
 FIXED_CONFIDENCE_ALGORITHMS = {
     "VB-EGE-practical",
+    "VB-EGE-theory",
     "UniformFocalBorda-FC",
     "UniformPairwiseBT-MLE-FC",
+    "UniformPairwiseBT-MLE-Cert",
     "UniformPairwiseBT-BordaPlugIn-FC",
 }
 
@@ -88,7 +91,7 @@ def _expanded_experiment_cells(exp: dict) -> list[tuple[dict, float | None, str]
     for params in params_list:
         for delta in deltas:
             seed_payload = {"params": params}
-            if not pair_delta_instances:
+            if delta is not None and not pair_delta_instances:
                 seed_payload["delta"] = delta
             seed_extra = dumps_json(seed_payload)
             cells.append((params, delta, seed_extra))
@@ -96,7 +99,7 @@ def _expanded_experiment_cells(exp: dict) -> list[tuple[dict, float | None, str]
 
 
 def _run_algorithm(name: str, theta, budget, cfg: dict, rng):
-    if name == "VB-EGE-practical":
+    if name in {"VB-EGE-practical", "VB-EGE-theory"}:
         run_cfg = VBEGEConfig(**cfg)
         res = run_vb_ege(theta, run_cfg, rng=rng)
         return {
@@ -125,7 +128,7 @@ def _run_algorithm(name: str, theta, budget, cfg: dict, rng):
         return run_uniform_focal_borda_fc(theta, cfg, rng)
     if name == "UniformPairwiseBT-MLE":
         return run_uniform_pairwise_bt_mle(theta, budget, rng, cfg)
-    if name == "UniformPairwiseBT-MLE-FC":
+    if name in {"UniformPairwiseBT-MLE-FC", "UniformPairwiseBT-MLE-Cert"}:
         return run_uniform_pairwise_bt_mle_fc(theta, cfg, rng)
     if name == "UniformPairwiseBT-BordaPlugIn":
         return run_uniform_pairwise_bt_borda_plugin(theta, budget, rng, cfg)
@@ -175,6 +178,13 @@ def _row_from_result(
     row = {
         "run_id": run_id,
         "seed": seed,
+        "replicate_id": meta.get("replicate_id"),
+        "instance_id": meta.get("instance_id"),
+        "instance_bank_id": meta.get("instance_bank_id"),
+        "instance_index": meta.get("instance_index"),
+        "observation_replicate": meta.get("observation_replicate"),
+        "instance_seed": meta.get("instance_seed"),
+        "theta_hash": meta.get("theta_hash"),
         "algorithm": algorithm,
         "experiment_id": exp_id,
         "instance_name": meta["name"],
@@ -252,9 +262,38 @@ def _iter_experiment_instance_specs(config: dict, base_seed: int):
                 if delta is not None:
                     run_cfg["delta"] = delta
                 alg_jobs.append((alg_name, run_cfg))
-            for rep in range(int(exp.get("n_reps", 1))):
-                inst_seed = stable_seed(base_seed, exp["id"], seed_extra, rep, "instance")
-                yield "experiment", cell_exp, rep, budgets, alg_jobs, inst_seed, seed_extra
+            n_reps = int(exp.get("n_reps", 1))
+            observation_reps = int(exp.get("observation_reps", 1))
+            if observation_reps <= 0 or n_reps % observation_reps:
+                raise ValueError(
+                    f"{exp['id']}: n_reps must be divisible by positive observation_reps"
+                )
+            n_instances = n_reps // observation_reps
+            configured_instances = exp.get("n_instances")
+            if configured_instances is not None and int(configured_instances) != n_instances:
+                raise ValueError(
+                    f"{exp['id']}: n_instances * observation_reps must equal n_reps"
+                )
+            bank_id = str(exp.get("instance_bank_id", exp["id"]))
+            bank_seed = int(exp.get("instance_bank_seed", base_seed))
+            for rep in range(n_reps):
+                instance_index = rep // observation_reps
+                observation_replicate = rep % observation_reps
+                inst_seed = stable_seed(
+                    bank_seed,
+                    bank_id,
+                    seed_extra,
+                    instance_index,
+                    "instance",
+                )
+                rep_exp = {
+                    **cell_exp,
+                    "_instance_bank_id": bank_id,
+                    "_instance_bank_seed": bank_seed,
+                    "_instance_index": instance_index,
+                    "_observation_replicate": observation_replicate,
+                }
+                yield "experiment", rep_exp, rep, budgets, alg_jobs, inst_seed, seed_extra
 
 
 def _iter_sweep_instance_specs(config: dict, base_seed: int):
@@ -284,6 +323,23 @@ def _prepare_instance_spec(payload):
     true_pareto = strict_pareto_set(theta)
     if strict_pareto_set(borda(theta)) != true_pareto:
         raise RuntimeError(f"Borda/Pareto mismatch in {exp['id']} rep {rep}")
+    theta_bytes = np.ascontiguousarray(theta, dtype=np.float64).tobytes()
+    theta_hash = hashlib.sha256(theta_bytes).hexdigest()
+    bank_id = str(exp.get("_instance_bank_id", exp["id"]))
+    instance_index = int(exp.get("_instance_index", rep))
+    observation_replicate = int(exp.get("_observation_replicate", 0))
+    meta = dict(meta)
+    meta.update(
+        {
+            "replicate_id": f"{bank_id}:{instance_index:04d}:{observation_replicate:02d}",
+            "instance_id": f"{bank_id}:{instance_index:04d}",
+            "instance_bank_id": bank_id,
+            "instance_index": instance_index,
+            "observation_replicate": observation_replicate,
+            "instance_seed": int(inst_seed),
+            "theta_hash": theta_hash,
+        }
+    )
     return kind, exp, rep, budgets, alg_jobs, theta, meta, seed_extra
 
 
@@ -295,14 +351,16 @@ def _iter_jobs_from_prepared_instances(prepared_instances, base_seed: int):
                 for budget in alg_budgets:
                     if budget is None and alg_name not in FIXED_CONFIDENCE_ALGORITHMS:
                         continue
+                    observation_seed = int(exp.get("observation_bank_seed", exp.get("_instance_bank_seed", base_seed)))
+                    observation_bank = str(exp.get("instance_bank_id", exp.get("_instance_bank_id", exp["id"])))
                     alg_seed = stable_seed(
-                        base_seed,
-                        exp["id"],
+                        observation_seed,
+                        observation_bank,
                         seed_extra,
                         rep,
                         budget,
                         alg_name,
-                        dumps_json(alg_cfg),
+                        alg_cfg.get("delta"),
                     )
                     yield exp, rep, budget, alg_name, alg_cfg, theta, meta, alg_seed
             else:
@@ -337,12 +395,35 @@ def main(argv=None):
     parser.add_argument("--checkpoint-every", type=int, default=100)
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--jobs", type=int, default=1)
+    parser.add_argument(
+        "--experiment-id",
+        action="append",
+        help="Run only the named experiment id; may be supplied more than once.",
+    )
+    parser.add_argument(
+        "--replicate-index",
+        action="append",
+        type=int,
+        help="Run only the zero-based replication index; may be supplied more than once.",
+    )
     args = parser.parse_args(argv)
 
     config = load_yaml(args.config)
     base_seed = int(args.seed if args.seed is not None else config.get("base_seed", 0))
     instance_specs = list(_iter_experiment_instance_specs(config, base_seed))
     instance_specs.extend(list(_iter_sweep_instance_specs(config, base_seed)))
+    if args.experiment_id:
+        selected = set(args.experiment_id)
+        instance_specs = [spec for spec in instance_specs if spec[1]["id"] in selected]
+        missing = selected - {spec[1]["id"] for spec in instance_specs}
+        if missing:
+            raise ValueError(f"unknown or empty experiment ids: {sorted(missing)}")
+    if args.replicate_index:
+        selected_reps = set(args.replicate_index)
+        instance_specs = [spec for spec in instance_specs if spec[2] in selected_reps]
+        missing_reps = selected_reps - {spec[2] for spec in instance_specs}
+        if missing_reps:
+            raise ValueError(f"unknown or empty replicate indices: {sorted(missing_reps)}")
     prep_desc = f"preparing {config.get('name', Path(args.config).stem)} instances"
     if args.jobs <= 1:
         prepared_instances = [

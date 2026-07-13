@@ -1,0 +1,37 @@
+name: theory_constants_sanity
+base_seed: 20260708
+
+algorithms:
+  VB-EGE-practical:
+    delta: 0.05
+    sample_const: 2.0
+    threshold_const: 4.0
+    log_const: 4.0
+    max_phases: 45
+  VB-EGE-theory:
+    delta: 0.05
+    sample_const: 8.0
+    threshold_const: 16.0
+    log_const: 4.0
+    max_phases: 45
+
+experiments:
+  - id: theory_constants_symmetric_K16_d4
+    generator: symmetric_hard
+    params: {K: 16, d: 4, Delta: 1.0}
+    n_reps: 100
+    n_instances: 10
+    observation_reps: 10
+    instance_bank_id: theory_symmetric_K16_d4_v1
+    instance_bank_seed: 20260708
+    observation_bank_seed: 20260708
+
+  - id: theory_constants_arena4_K16
+    generator: arena_tradeoff_frontier
+    params: {K: 16, d: 4, s: 4, margin_low: 0.08, margin_high: 0.25, alpha: 0.7}
+    n_reps: 100
+    n_instances: 10
+    observation_reps: 10
+    instance_bank_id: theory_arena4_K16_v1
+    instance_bank_seed: 20260708
+    observation_bank_seed: 20260708

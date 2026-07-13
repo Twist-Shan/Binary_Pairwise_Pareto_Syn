@@ -12,6 +12,18 @@ from .compat import import_pandas_quietly
 pd = import_pandas_quietly()
 
 
+ALGORITHM_NAME_ALIASES = {
+    "UniformPairwiseBT-MLE-FC": "UniformPairwiseBT-MLE-Cert",
+}
+
+
+def canonicalize_algorithm_names(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy()
+    if "algorithm" in out:
+        out["algorithm"] = out["algorithm"].replace(ALGORITHM_NAME_ALIASES)
+    return out
+
+
 def set_error(recommended, true_pareto) -> bool:
     return set(recommended) != set(true_pareto)
 
@@ -42,6 +54,8 @@ def _nanquantile(s: pd.Series, q: float) -> float:
 
 def summarize_runs(df: pd.DataFrame) -> pd.DataFrame:
     """Summarize raw replicate rows into plotting-ready grouped metrics."""
+
+    df = canonicalize_algorithm_names(df)
 
     preferred = [
         "experiment_id",
@@ -92,6 +106,8 @@ def summarize_runs(df: pd.DataFrame) -> pd.DataFrame:
                 "wilson_upper": hi,
                 "mean_tau": _nanmean(g.get("tau", pd.Series(dtype=float))),
                 "median_tau": _nanquantile(g.get("tau", pd.Series(dtype=float)), 0.50),
+                "q25_tau": _nanquantile(g.get("tau", pd.Series(dtype=float)), 0.25),
+                "q75_tau": _nanquantile(g.get("tau", pd.Series(dtype=float)), 0.75),
                 "q80_tau": _nanquantile(g.get("tau", pd.Series(dtype=float)), 0.80),
                 "q90_tau": _nanquantile(g.get("tau", pd.Series(dtype=float)), 0.90),
                 "q95_tau": _nanquantile(g.get("tau", pd.Series(dtype=float)), 0.95),
@@ -145,6 +161,9 @@ def summarize_runs(df: pd.DataFrame) -> pd.DataFrame:
                 "mean_pair_cell_coverage": _nanmean(
                     g.get("pair_cell_coverage", pd.Series(dtype=float))
                 ),
+                "mean_pair_cell_count": _nanmean(
+                    g.get("pair_cell_count", pd.Series(dtype=float))
+                ),
                 "mean_achieved_objective_correlation": _nanmean(
                     g.get("achieved_objective_correlation", pd.Series(dtype=float))
                 ),
@@ -163,6 +182,112 @@ def summarize_runs(df: pd.DataFrame) -> pd.DataFrame:
             }
         )
         records.append(rec)
+    return pd.DataFrame.from_records(records)
+
+
+def paired_tau_ratios(
+    df: pd.DataFrame,
+    baseline: str = "VB-EGE-practical",
+    n_boot: int = 2000,
+) -> pd.DataFrame:
+    """Compute robust per-replication stopping-time ratios against ``baseline``."""
+
+    work = canonicalize_algorithm_names(df)
+    required = {"experiment_id", "algorithm", "tau"}
+    if not required.issubset(work.columns):
+        return pd.DataFrame()
+    work = work.copy()
+    work["tau"] = pd.to_numeric(work["tau"], errors="coerce")
+    work = work[np.isfinite(work["tau"]) & (work["tau"] > 0)]
+    if work.empty:
+        return pd.DataFrame()
+
+    design_cols = [
+        c
+        for c in ["experiment_id", "K", "d", "budget", "delta"]
+        if c in work.columns
+    ]
+    design_cols += sorted(
+        c
+        for c in work.columns
+        if (c.startswith("param_") and not c.startswith("param_achieved_"))
+        or c.startswith("meta_")
+    )
+
+    if "replicate_id" in work and work["replicate_id"].notna().all():
+        work["_pair_id"] = work["replicate_id"].astype(str)
+    else:
+        sort_cols = [c for c in ["run_id"] if c in work.columns]
+        if sort_cols:
+            work = work.sort_values(sort_cols)
+        work["_pair_id"] = work.groupby(
+            design_cols + ["algorithm"], dropna=False
+        ).cumcount()
+
+    records: list[dict] = []
+    for key, g in work.groupby(design_cols, dropna=False):
+        if not isinstance(key, tuple):
+            key = (key,)
+        if g.duplicated(["_pair_id", "algorithm"]).any():
+            continue
+        wide = g.pivot(index="_pair_id", columns="algorithm", values="tau")
+        if baseline not in wide:
+            continue
+        for algorithm in wide.columns:
+            if algorithm == baseline:
+                continue
+            paired = wide[[baseline, algorithm]].dropna()
+            if paired.empty:
+                continue
+            ratios = (paired[algorithm] / paired[baseline]).to_numpy(dtype=float)
+            valid = np.isfinite(ratios) & (ratios > 0)
+            ratios = ratios[valid]
+            if not len(ratios):
+                continue
+            log_ratios = np.log(ratios)
+            rng = np.random.default_rng(20260708 + len(records))
+            cluster_values = None
+            if "instance_id" in g and g["instance_id"].notna().any():
+                pair_instances = (
+                    g.dropna(subset=["instance_id"])
+                    .drop_duplicates("_pair_id")
+                    .set_index("_pair_id")["instance_id"]
+                )
+                ratio_index = paired.index.to_numpy()[valid]
+                instance_ids = pair_instances.reindex(ratio_index).to_numpy()
+                if pd.notna(instance_ids).all():
+                    cluster_values = [
+                        log_ratios[instance_ids == instance_id]
+                        for instance_id in pd.unique(instance_ids)
+                    ]
+            if cluster_values and len(cluster_values) > 1:
+                boot = np.empty(n_boot, dtype=float)
+                for draw_index in range(n_boot):
+                    sampled = rng.integers(0, len(cluster_values), size=len(cluster_values))
+                    boot[draw_index] = np.median(
+                        np.concatenate([cluster_values[index] for index in sampled])
+                    )
+            elif len(log_ratios) == 1:
+                boot = np.repeat(log_ratios[0], n_boot)
+            else:
+                draws = rng.integers(0, len(log_ratios), size=(n_boot, len(log_ratios)))
+                boot = np.median(log_ratios[draws], axis=1)
+            rec = dict(zip(design_cols, key))
+            rec.update(
+                {
+                    "algorithm": algorithm,
+                    "baseline": baseline,
+                    "paired_n": int(len(ratios)),
+                    "median_ratio": float(np.exp(np.median(log_ratios))),
+                    "q25_ratio": float(np.exp(np.quantile(log_ratios, 0.25))),
+                    "q75_ratio": float(np.exp(np.quantile(log_ratios, 0.75))),
+                    "q90_ratio": float(np.exp(np.quantile(log_ratios, 0.90))),
+                    "bootstrap_ci_lower": float(np.exp(np.quantile(boot, 0.025))),
+                    "bootstrap_ci_upper": float(np.exp(np.quantile(boot, 0.975))),
+                    "bootstrap_unit": "instance_id" if cluster_values else "replication",
+                }
+            )
+            records.append(rec)
     return pd.DataFrame.from_records(records)
 
 

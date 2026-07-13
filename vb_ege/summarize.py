@@ -9,7 +9,7 @@ from pathlib import Path
 
 from .compat import import_pandas_quietly
 from .io_utils import ensure_parent
-from .metrics import loglog_slope, summarize_runs
+from .metrics import loglog_slope, paired_tau_ratios, summarize_runs
 from .plotting import (
     plot_baseline_ratio_vs_x,
     plot_budget_ratio_curve,
@@ -23,6 +23,7 @@ from .plotting import (
     plot_mle_sign_accuracy,
     plot_mle_theta_rmse,
     plot_pair_cell_coverage_effect,
+    plot_paired_ratio_by_setting,
     plot_stopping_scaling,
     plot_tau_quantiles_vs_x,
 )
@@ -139,6 +140,7 @@ def _write_special_figures(summary: pd.DataFrame, figdir: Path, out: Path) -> No
                     "mean_norm_tau_B_logdelta",
                     figdir / f"tau_over_log_inv_delta_{suffix}.pdf",
                     ylabel="mean normalized tau / log(1/delta)",
+                    xlabel="log(1/delta)",
                 )
         vb = summary[summary["algorithm"] == "VB-EGE-practical"]
         if not vb.empty and "delta" in vb:
@@ -148,6 +150,8 @@ def _write_special_figures(summary: pd.DataFrame, figdir: Path, out: Path) -> No
                 "mean_final_phase",
                 figdir / "final_phase_distribution_vs_delta.pdf",
                 ylabel="mean final phase",
+                series_col="experiment_id",
+                xlabel="log(1/delta)",
             )
         _write_confidence_slopes(summary, out.with_name(out.stem + "_slopes.csv"))
     elif name == "constants_calibration":
@@ -158,8 +162,8 @@ def _write_special_figures(summary: pd.DataFrame, figdir: Path, out: Path) -> No
             plot_calibration_heatmap(
                 summary,
                 str(exp_id),
-                "mean_tau",
-                figdir / f"heatmap_mean_tau_by_constants_{suffix}.pdf",
+                "median_tau",
+                figdir / f"heatmap_median_tau_by_constants_{suffix}.pdf",
             )
             plot_calibration_heatmap(
                 summary,
@@ -193,6 +197,7 @@ def _write_special_figures(summary: pd.DataFrame, figdir: Path, out: Path) -> No
             summary,
             "param_s",
             figdir / "baseline_ratio_vs_pareto_size.pdf",
+            xlabel="true Pareto size |P|",
         )
         vb = summary[summary["algorithm"] == "VB-EGE-practical"]
         if not vb.empty:
@@ -202,6 +207,7 @@ def _write_special_figures(summary: pd.DataFrame, figdir: Path, out: Path) -> No
                 "mean_num_accepted",
                 figdir / "accepted_phase_profile.pdf",
                 ylabel="mean accepted arms",
+                xlabel="true Pareto size |P|",
             )
             plot_metric_vs_x(
                 vb,
@@ -209,41 +215,49 @@ def _write_special_figures(summary: pd.DataFrame, figdir: Path, out: Path) -> No
                 "mean_num_rejected",
                 figdir / "rejected_phase_profile.pdf",
                 ylabel="mean rejected arms",
+                xlabel="true Pareto size |P|",
             )
     elif name == "correlated_arena":
         for exp_id, g in summary.groupby("experiment_id"):
             suffix = _suffix_for_exp(exp_id)
-            x_col = "param_rho"
+            x_col = "mean_achieved_objective_correlation"
             plot_tau_quantiles_vs_x(
                 g,
                 x_col,
                 figdir / f"tau_vs_rho_{suffix}.pdf",
-                xlabel="target objective correlation rho",
+                xlabel="achieved objective correlation",
             )
             plot_tau_quantiles_vs_x(
                 g,
                 x_col,
                 figdir / f"norm_tau_vs_rho_{suffix}.pdf",
-                xlabel="target objective correlation rho",
+                xlabel="achieved objective correlation",
                 normalized=True,
             )
-        plot_baseline_ratio_vs_x(summary, "param_rho", figdir / "baseline_ratio_vs_rho.pdf")
+        plot_baseline_ratio_vs_x(
+            summary,
+            "mean_achieved_objective_correlation",
+            figdir / "baseline_ratio_vs_rho.pdf",
+            xlabel="achieved objective correlation",
+        )
         plot_metric_vs_x(
             summary,
-            "param_rho",
+            "mean_achieved_objective_correlation",
             "mean_pair_cell_coverage",
             figdir / "pair_cell_coverage_vs_rho.pdf",
-            ylabel="mean pair-cell coverage",
+            ylabel="samples per pair-coordinate cell",
             series_col="experiment_id",
+            xlabel="achieved objective correlation",
         )
         vb = summary[summary["algorithm"] == "VB-EGE-practical"]
         plot_metric_vs_x(
             vb,
-            "param_rho",
+            "mean_achieved_objective_correlation",
             "mean_delta_min_B",
             figdir / "delta_min_B_vs_rho.pdf",
             ylabel="mean Borda delta_min",
             series_col="experiment_id",
+            xlabel="achieved objective correlation",
         )
     elif name == "under_budget_stress":
         for exp_id, g in summary.groupby("experiment_id"):
@@ -272,9 +286,13 @@ def main(argv=None):
 
     raw = _read_raw(args.raw)
     summary = summarize_runs(raw)
+    paired = paired_tau_ratios(raw)
     out = Path(args.out)
     ensure_parent(out)
     summary.to_csv(out, index=False)
+    paired_out = out.with_name(out.stem + "_paired.csv")
+    if not paired.empty:
+        paired.to_csv(paired_out, index=False)
     figdir = Path(args.figdir)
     figdir.mkdir(parents=True, exist_ok=True)
 
@@ -289,6 +307,7 @@ def main(argv=None):
             if col in g.columns and g[col].nunique(dropna=True) > 1:
                 plot_stopping_scaling(g, col, figdir / f"tau_vs_{col}_{exp_id}.pdf")
     plot_pair_cell_coverage_effect(summary, figdir / "pair_cell_coverage_effect.pdf")
+    plot_paired_ratio_by_setting(paired, figdir / "paired_ratio_by_setting.pdf")
     _write_slopes(summary, out.with_name(out.stem + "_slopes.csv"))
     _write_special_figures(summary, figdir, out)
     print(f"wrote summary to {out}")

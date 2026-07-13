@@ -396,7 +396,7 @@ def run_uniform_pairwise_bt_mle_fc(theta, config=None, rng=None) -> dict:
         theta_hat = fit["theta_hat"]
         recommended = strict_pareto_set(theta_hat)
     result = _base_result(
-        "UniformPairwiseBT-MLE-FC",
+        "UniformPairwiseBT-MLE-Cert",
         theta,
         recommended,
         tau,

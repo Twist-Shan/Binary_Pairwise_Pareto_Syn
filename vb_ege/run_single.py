@@ -70,7 +70,7 @@ def main(argv=None):
         result = run_uniform_focal_borda_fc(theta, {"delta": args.delta}, rng)
     elif args.algorithm == "UniformPairwiseBT-MLE":
         result = run_uniform_pairwise_bt_mle(theta, args.budget, rng)
-    elif args.algorithm == "UniformPairwiseBT-MLE-FC":
+    elif args.algorithm in {"UniformPairwiseBT-MLE-FC", "UniformPairwiseBT-MLE-Cert"}:
         result = run_uniform_pairwise_bt_mle_fc(theta, {"delta": args.delta}, rng)
     elif args.algorithm == "UniformPairwiseBT-BordaPlugIn":
         result = run_uniform_pairwise_bt_borda_plugin(theta, args.budget, rng)

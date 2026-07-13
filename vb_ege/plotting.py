@@ -211,7 +211,13 @@ def plot_tau_quantiles_vs_x(
     _savefig(outpath)
 
 
-def plot_baseline_ratio_vs_x(summary_df, x_col: str, outpath, baseline="VB-EGE-practical"):
+def plot_baseline_ratio_vs_x(
+    summary_df,
+    x_col: str,
+    outpath,
+    baseline="VB-EGE-practical",
+    xlabel: str | None = None,
+):
     df = summary_df.dropna(subset=[x_col, "mean_tau"]).copy()
     if df.empty or baseline not in set(df["algorithm"]):
         return
@@ -260,9 +266,10 @@ def plot_baseline_ratio_vs_x(summary_df, x_col: str, outpath, baseline="VB-EGE-p
         plt.plot(g[x_col], g["ratio"], marker="o", label=label)
     plt.xscale("log" if (r[x_col] > 0).all() else "linear")
     plt.yscale("log")
-    plt.xlabel(x_col)
+    x_label = xlabel or x_col
+    plt.xlabel(x_label)
     plt.ylabel(f"mean tau / {baseline} mean tau")
-    plt.title(f"Baseline ratios vs {x_col}")
+    plt.title(f"Baseline ratios vs {x_label}")
     plt.legend(fontsize=8)
     _savefig(outpath)
 
@@ -274,6 +281,7 @@ def plot_metric_vs_x(
     outpath,
     ylabel: str | None = None,
     series_col: str | None = None,
+    xlabel: str | None = None,
 ):
     df = summary_df.dropna(subset=[x_col, y_col]).copy()
     if df.empty:
@@ -295,30 +303,31 @@ def plot_metric_vs_x(
             label = str(key)
         g = g.sort_values(x_col)
         plt.plot(g[x_col], g[y_col], marker="o", label=label)
-    plt.xlabel(x_col)
+    x_label = xlabel or x_col
+    plt.xlabel(x_label)
     plt.ylabel(ylabel or y_col)
-    plt.title(f"{ylabel or y_col} vs {x_col}")
+    plt.title(f"{ylabel or y_col} vs {x_label}")
     plt.legend(fontsize=8)
     _savefig(outpath)
 
 
 def plot_calibration_frontier(summary_df, outpath, y_col="error_rate"):
-    df = summary_df.dropna(subset=["mean_tau", y_col, "sample_const", "threshold_const"]).copy()
+    df = summary_df.dropna(subset=["median_tau", y_col, "sample_const", "threshold_const"]).copy()
     df = df[df["algorithm"] == "VB-EGE-practical"]
     if df.empty:
         return
     plt.figure(figsize=(6.4, 4.4))
     for exp_id, g in df.groupby("experiment_id"):
-        plt.scatter(g["mean_tau"], g[y_col], label=exp_id, alpha=0.8)
+        plt.scatter(g["median_tau"], g[y_col], label=exp_id, alpha=0.8)
         for _, row in g.iterrows():
             if row["sample_const"] == 2.0 and row["threshold_const"] == 4.0:
-                plt.scatter(row["mean_tau"], row[y_col], marker="*", s=180, color="black")
+                plt.scatter(row["median_tau"], row[y_col], marker="*", s=180, color="black")
     plt.xscale("log")
     if (df[y_col] > 0).any():
         plt.yscale("log")
-    plt.xlabel("mean stopping time")
+    plt.xlabel("median stopping time")
     plt.ylabel(y_col)
-    plt.title(f"Constants calibration frontier: {y_col}")
+    plt.title(f"Constant sensitivity: {y_col}")
     plt.legend(fontsize=8)
     _savefig(outpath)
 
@@ -438,13 +447,26 @@ def plot_pair_cell_coverage_effect(summary_df, outpath):
         base_tau = vb_tau.get(key_from(row))
         tau = float(row["mean_tau"])
         coverage = float(row["mean_pair_cell_coverage"])
-        if not base_tau or base_tau <= 0 or tau <= 0 or coverage <= 0:
+        K = float(row.get("K", np.nan))
+        d = float(row.get("d", np.nan))
+        pair_cells = float(row.get("mean_pair_cell_count", np.nan))
+        focal_cells = K * d
+        if (
+            not base_tau
+            or base_tau <= 0
+            or tau <= 0
+            or coverage <= 0
+            or not np.isfinite(pair_cells)
+            or pair_cells <= 0
+            or not np.isfinite(focal_cells)
+            or focal_cells <= 0
+        ):
             continue
         rows.append(
             {
                 "algorithm": row["algorithm"],
-                "coverage": coverage,
-                "ratio": tau / base_tau,
+                "cell_multiplier": pair_cells / focal_cells,
+                "per_cell_burden_ratio": coverage / (base_tau / focal_cells),
             }
         )
     if not rows:
@@ -452,28 +474,98 @@ def plot_pair_cell_coverage_effect(summary_df, outpath):
     plot_df = pd.DataFrame(rows)
     plt.figure(figsize=(6.0, 4.2))
     for algorithm, g in plot_df.groupby("algorithm"):
-        plt.scatter(g["coverage"], g["ratio"], label=algorithm, alpha=0.8, s=28)
+        plt.scatter(
+            g["cell_multiplier"],
+            g["per_cell_burden_ratio"],
+            label=algorithm,
+            alpha=0.8,
+            s=28,
+        )
     plt.xscale("log")
     plt.yscale("log")
-    plt.xlabel("mean pair-cell coverage")
-    plt.ylabel("mean stopping time / VB-EGE")
-    plt.title("Pairwise coverage cost")
-    plt.axvline(1.0, color="black", linestyle=":", linewidth=1.0)
+    plt.xlabel("pairwise / focal basic-cell count")
+    plt.ylabel("pairwise / VB samples per basic cell")
+    plt.title("Pairwise total-cost decomposition")
+    plt.axhline(1.0, color="black", linestyle=":", linewidth=1.0)
     plt.legend(fontsize=8)
     _savefig(outpath)
 
 
 def plot_fixed_confidence_tau(summary_df, outpath):
-    df = summary_df.dropna(subset=["mean_tau"]).copy()
+    df = summary_df.dropna(subset=["median_tau", "q25_tau", "q75_tau"]).copy()
     if df.empty:
         return
-    df = df.sort_values("mean_tau")
+    df = df.sort_values("median_tau")
     labels = df["algorithm"].astype(str).tolist()
-    values = df["mean_tau"].to_numpy(dtype=float)
+    values = df["median_tau"].to_numpy(dtype=float)
+    lower = values - df["q25_tau"].to_numpy(dtype=float)
+    upper = df["q75_tau"].to_numpy(dtype=float) - values
     plt.figure(figsize=(7.2, 4.2))
-    plt.bar(labels, values, color="tab:blue", alpha=0.85)
+    plt.bar(
+        labels,
+        values,
+        yerr=np.vstack([lower, upper]),
+        color="tab:blue",
+        alpha=0.85,
+        capsize=3,
+    )
     plt.yscale("log")
-    plt.ylabel("mean stopping time")
-    plt.title(_curve_title(df, "fixed-confidence stopping time"))
+    plt.ylabel("median stopping time (IQR)")
+    plt.title(_curve_title(df, "fixed-confidence median stopping time"))
     plt.xticks(rotation=25, ha="right")
+    _savefig(outpath)
+
+
+def plot_paired_ratio_by_setting(paired_df, outpath):
+    required = {
+        "experiment_id",
+        "algorithm",
+        "median_ratio",
+        "bootstrap_ci_lower",
+        "bootstrap_ci_upper",
+    }
+    if paired_df.empty or not required.issubset(paired_df.columns):
+        return
+    df = paired_df.dropna(subset=list(required)).copy()
+    if df.empty:
+        return
+    settings = list(dict.fromkeys(df["experiment_id"].astype(str)))
+    algorithms = list(dict.fromkeys(df["algorithm"].astype(str)))
+    y0 = np.arange(len(settings), dtype=float)
+    width = 0.7 / max(1, len(algorithms))
+    plt.figure(figsize=(8.0, max(4.2, 0.55 * len(settings) + 1.5)))
+    for index, algorithm in enumerate(algorithms):
+        g = df[df["algorithm"] == algorithm].set_index("experiment_id")
+        xs = []
+        lows = []
+        highs = []
+        ys = []
+        for setting_index, setting in enumerate(settings):
+            if setting not in g.index:
+                continue
+            row = g.loc[setting]
+            if isinstance(row, pd.DataFrame):
+                row = row.iloc[0]
+            x = float(row["median_ratio"])
+            xs.append(x)
+            lows.append(x - float(row["bootstrap_ci_lower"]))
+            highs.append(float(row["bootstrap_ci_upper"]) - x)
+            ys.append(y0[setting_index] + (index - (len(algorithms) - 1) / 2) * width)
+        if xs:
+            plt.errorbar(
+                xs,
+                ys,
+                xerr=np.vstack([lows, highs]),
+                fmt="o",
+                capsize=3,
+                label=algorithm,
+            )
+    labels = [s.removeprefix("fc_").replace("_", " ") for s in settings]
+    plt.yticks(y0, labels)
+    plt.xscale("log")
+    plt.axvline(1.0, color="black", linestyle=":", linewidth=1.0)
+    plt.xlabel("median paired stopping-time ratio to VB-EGE (95% bootstrap CI)")
+    plt.ylabel("benchmark setting")
+    plt.title("Paired fixed-confidence sample cost")
+    plt.legend(fontsize=8)
     _savefig(outpath)

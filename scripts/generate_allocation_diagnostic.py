@@ -54,16 +54,22 @@ def main() -> None:
         ax.scatter(
             gaps[valid & ~is_pareto],
             allocation[valid & ~is_pareto],
-            s=24,
-            alpha=0.75,
+            s=30,
+            color="#8EC5E8",
+            edgecolor="#3E86B8",
+            linewidth=0.85,
+            alpha=0.82,
             label="dominated arm",
         )
         ax.scatter(
             gaps[valid & is_pareto],
             allocation[valid & is_pareto],
-            s=34,
+            s=42,
             marker="^",
-            alpha=0.85,
+            color="#F28E8E",
+            edgecolor="#C94F5D",
+            linewidth=0.9,
+            alpha=0.86,
             label="Pareto arm",
         )
         ax.set_xscale("log")
@@ -73,8 +79,14 @@ def main() -> None:
         ax.grid(alpha=0.2, which="both")
     for ax in axes:
         ax.set_ylabel("VB-EGE samples allocated to arm")
-    axes[1].legend(fontsize=8)
-    fig.suptitle("Adaptive allocation concentrates on small-gap arms")
+    axes[1].legend(
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.2),
+        ncol=2,
+        frameon=False,
+        fontsize=8,
+    )
+    fig.suptitle("Adaptive allocation by Borda gap")
     fig.tight_layout()
 
     out = Path(args.out)

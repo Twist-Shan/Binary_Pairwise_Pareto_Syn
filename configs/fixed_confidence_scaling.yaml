@@ -60,12 +60,3 @@ sweeps:
       d: [10]
       Delta: [0.5, 0.75, 1.0, 1.25, 1.5]
       delta: [0.05]
-
-  - id: fc_delta_scaling_K64_d10
-    generator: symmetric_hard
-    n_reps: 200
-    grid:
-      K: [64]
-      d: [10]
-      Delta: [1.0]
-      delta: [0.20, 0.10, 0.05, 0.02, 0.01]

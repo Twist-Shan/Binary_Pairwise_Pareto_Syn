@@ -3,6 +3,7 @@ from vb_ege.instances import (
     arena_tradeoff_frontier,
     correlated_arena_like,
     convex_frontier_2d,
+    convex_frontier_3d,
     highdim_two_group,
     unique_witness_d,
 )
@@ -30,6 +31,13 @@ def test_highdim_two_group_has_no_low_pareto_assumption_break():
 def test_convex_frontier_size():
     theta, _ = convex_frontier_2d(K=20, s=6, seed=3)
     assert len(strict_pareto_set(theta)) == 6
+
+
+def test_convex_frontier_3d_size():
+    theta, meta = convex_frontier_3d(K=24, s=8, seed=4)
+    assert theta.shape == (24, 3)
+    assert len(strict_pareto_set(theta)) == 8
+    assert meta["expected_pareto_size"] == 8
 
 
 def test_correlated_arena_target_pareto_size_and_metadata():

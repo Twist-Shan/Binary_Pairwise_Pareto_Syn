@@ -52,6 +52,49 @@ def _nanquantile(s: pd.Series, q: float) -> float:
     return float(values.quantile(q)) if len(values) else np.nan
 
 
+def _mean_tau_uncertainty(g: pd.DataFrame) -> dict[str, float | int | str]:
+    values = pd.to_numeric(g.get("tau", pd.Series(dtype=float)), errors="coerce").dropna()
+    if values.empty:
+        return {
+            "std_tau": np.nan,
+            "se_tau": np.nan,
+            "mean_tau_ci_lower": np.nan,
+            "mean_tau_ci_upper": np.nan,
+            "mean_tau_ci_n": 0,
+            "mean_tau_ci_unit": "replication",
+        }
+
+    mean_tau = float(values.mean())
+    std_tau = float(values.std(ddof=1)) if len(values) > 1 else 0.0
+    se_tau = std_tau / np.sqrt(len(values)) if len(values) > 1 else 0.0
+    effective_n = len(values)
+    unit = "replication"
+
+    if "instance_id" in g.columns:
+        clustered = pd.DataFrame(
+            {
+                "tau": pd.to_numeric(g.loc[values.index, "tau"], errors="coerce"),
+                "instance_id": g.loc[values.index, "instance_id"],
+            }
+        ).dropna(subset=["tau", "instance_id"])
+        num_instances = clustered["instance_id"].nunique(dropna=True)
+        if 1 < num_instances < len(clustered):
+            cluster_means = clustered.groupby("instance_id", dropna=True)["tau"].mean()
+            effective_n = len(cluster_means)
+            se_tau = float(cluster_means.std(ddof=1) / np.sqrt(effective_n))
+            unit = "instance_id"
+
+    half_width = 1.96 * se_tau
+    return {
+        "std_tau": std_tau,
+        "se_tau": float(se_tau),
+        "mean_tau_ci_lower": max(0.0, mean_tau - half_width),
+        "mean_tau_ci_upper": mean_tau + half_width,
+        "mean_tau_ci_n": int(effective_n),
+        "mean_tau_ci_unit": unit,
+    }
+
+
 def summarize_runs(df: pd.DataFrame) -> pd.DataFrame:
     """Summarize raw replicate rows into plotting-ready grouped metrics."""
 
@@ -98,6 +141,7 @@ def summarize_runs(df: pd.DataFrame) -> pd.DataFrame:
         n = len(g)
         errors = int(pd.to_numeric(g["error"], errors="coerce").fillna(False).sum())
         lo, hi = wilson_ci(errors, n)
+        tau_uncertainty = _mean_tau_uncertainty(g)
         rec.update(
             {
                 "n_reps": n,
@@ -112,6 +156,7 @@ def summarize_runs(df: pd.DataFrame) -> pd.DataFrame:
                 "q90_tau": _nanquantile(g.get("tau", pd.Series(dtype=float)), 0.90),
                 "q95_tau": _nanquantile(g.get("tau", pd.Series(dtype=float)), 0.95),
                 "q99_tau": _nanquantile(g.get("tau", pd.Series(dtype=float)), 0.99),
+                **tau_uncertainty,
                 "mean_stopped": _nanmean(g.get("stopped", pd.Series(dtype=float))),
                 "mean_hamming": _nanmean(g.get("hamming", pd.Series(dtype=float))),
                 "mean_pareto_size_true": _nanmean(
@@ -190,7 +235,7 @@ def paired_tau_ratios(
     baseline: str = "VB-EGE-practical",
     n_boot: int = 2000,
 ) -> pd.DataFrame:
-    """Compute robust per-replication stopping-time ratios against ``baseline``."""
+    """Compute paired stopping-time ratios against ``baseline``."""
 
     work = canonicalize_algorithm_names(df)
     required = {"experiment_id", "algorithm", "tau"}
@@ -247,6 +292,9 @@ def paired_tau_ratios(
             log_ratios = np.log(ratios)
             rng = np.random.default_rng(20260708 + len(records))
             cluster_values = None
+            ratio_se = float(np.std(ratios, ddof=1) / np.sqrt(len(ratios))) if len(ratios) > 1 else 0.0
+            ratio_se_n = len(ratios)
+            ratio_se_unit = "replication"
             if "instance_id" in g and g["instance_id"].notna().any():
                 pair_instances = (
                     g.dropna(subset=["instance_id"])
@@ -260,6 +308,20 @@ def paired_tau_ratios(
                         log_ratios[instance_ids == instance_id]
                         for instance_id in pd.unique(instance_ids)
                     ]
+                    ratio_cluster_means = np.asarray(
+                        [
+                            np.mean(ratios[instance_ids == instance_id])
+                            for instance_id in pd.unique(instance_ids)
+                        ],
+                        dtype=float,
+                    )
+                    if len(ratio_cluster_means) > 1:
+                        ratio_se = float(
+                            np.std(ratio_cluster_means, ddof=1)
+                            / np.sqrt(len(ratio_cluster_means))
+                        )
+                        ratio_se_n = len(ratio_cluster_means)
+                        ratio_se_unit = "instance_id"
             if cluster_values and len(cluster_values) > 1:
                 boot = np.empty(n_boot, dtype=float)
                 for draw_index in range(n_boot):
@@ -278,6 +340,10 @@ def paired_tau_ratios(
                     "algorithm": algorithm,
                     "baseline": baseline,
                     "paired_n": int(len(ratios)),
+                    "mean_ratio": float(np.mean(ratios)),
+                    "se_ratio": ratio_se,
+                    "mean_ratio_se_n": int(ratio_se_n),
+                    "mean_ratio_se_unit": ratio_se_unit,
                     "median_ratio": float(np.exp(np.median(log_ratios))),
                     "q25_ratio": float(np.exp(np.quantile(log_ratios, 0.25))),
                     "q75_ratio": float(np.exp(np.quantile(log_ratios, 0.75))),

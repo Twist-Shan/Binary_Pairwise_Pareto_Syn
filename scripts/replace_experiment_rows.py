@@ -16,7 +16,7 @@ def _read(path: str):
     if source.suffix == ".jsonl":
         with source.open("r", encoding="utf-8") as handle:
             return pd.DataFrame([json.loads(line) for line in handle if line.strip()])
-    return pd.read_csv(source)
+    return pd.read_csv(source, low_memory=False)
 
 
 def main() -> None:
@@ -27,7 +27,7 @@ def main() -> None:
     parser.add_argument("--out", required=True)
     args = parser.parse_args()
 
-    base = pd.read_csv(args.base)
+    base = pd.read_csv(args.base, low_memory=False)
     replacement = pd.concat([_read(path) for path in args.replacement], ignore_index=True)
     selected = set(args.experiment_id)
     replacement = replacement[replacement["experiment_id"].isin(selected)].copy()

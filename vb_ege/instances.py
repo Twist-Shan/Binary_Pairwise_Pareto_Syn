@@ -333,6 +333,49 @@ def convex_frontier_2d(
     return theta, meta
 
 
+def convex_frontier_3d(
+    K: int = 60,
+    s: int = 15,
+    d: int = 3,
+    alpha: float = 1.0,
+    margin_low: float = 0.03,
+    margin_high: float = 0.18,
+    seed: int | None = None,
+    permute: bool = True,
+) -> tuple[np.ndarray, dict]:
+    if d != 3:
+        raise ValueError("convex_frontier_3d requires d=3")
+    if not 1 <= s <= K:
+        raise ValueError("s must satisfy 1 <= s <= K")
+    rng = np.random.default_rng(seed)
+    theta_p = _pareto_anchors(s, d, rng, alpha=alpha)
+    dominated = []
+    for _ in range(K - s):
+        witness = rng.integers(0, s)
+        margin = rng.uniform(margin_low, margin_high, size=d)
+        dominated.append(theta_p[witness] - margin)
+    theta = np.vstack([theta_p, np.asarray(dominated)])
+    theta, perm = _permute(theta, rng, permute)
+    meta = _meta(
+        "convex_frontier_3d",
+        theta,
+        seed,
+        {
+            "K": K,
+            "d": d,
+            "s": s,
+            "alpha": alpha,
+            "margin_low": margin_low,
+            "margin_high": margin_high,
+            "permute": permute,
+        },
+        perm,
+    )
+    meta["expected_pareto_size"] = s
+    assert len(strict_pareto_set(theta)) == s
+    return theta, meta
+
+
 def circle_2d(
     K: int = 200,
     s: int = 20,
@@ -382,6 +425,7 @@ GENERATORS: dict[str, Callable[..., tuple[np.ndarray, dict]]] = {
     "unique_witness_d": unique_witness_d,
     "highdim_two_group": highdim_two_group,
     "convex_frontier_2d": convex_frontier_2d,
+    "convex_frontier_3d": convex_frontier_3d,
     "circle_2d": circle_2d,
     "boundary_equality_sanity": boundary_equality_sanity,
 }

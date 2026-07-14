@@ -12,6 +12,7 @@ from .io_utils import ensure_parent
 from .metrics import loglog_slope, paired_tau_ratios, summarize_runs
 from .plotting import (
     plot_baseline_ratio_vs_x,
+    plot_benchmark_grouped_bars,
     plot_budget_ratio_curve,
     plot_budget_curve,
     plot_budget_curve_normalized,
@@ -25,7 +26,8 @@ from .plotting import (
     plot_pair_cell_coverage_effect,
     plot_paired_ratio_by_setting,
     plot_stopping_scaling,
-    plot_tau_quantiles_vs_x,
+    plot_stopping_scaling_bar,
+    plot_tau_mean_vs_x,
 )
 
 pd = import_pandas_quietly()
@@ -38,8 +40,8 @@ def _read_raw(path: str) -> pd.DataFrame:
             with contextlib.redirect_stderr(io.StringIO()):
                 return pd.read_parquet(p)
         except Exception:
-            return pd.read_csv(p.with_suffix(".csv"))
-    return pd.read_csv(p)
+            return pd.read_csv(p.with_suffix(".csv"), low_memory=False)
+    return pd.read_csv(p, low_memory=False)
 
 
 def _write_slopes(summary: pd.DataFrame, out: Path) -> None:
@@ -94,7 +96,7 @@ def _write_confidence_slopes(summary: pd.DataFrame, out: Path) -> None:
         x = pd.to_numeric(g["delta"], errors="coerce").apply(
             lambda v: None if pd.isna(v) or v <= 0 else float(__import__("math").log(1.0 / v))
         )
-        for metric in ["median_tau", "q95_tau", "mean_norm_tau_B"]:
+        for metric in ["mean_tau", "q95_tau", "mean_norm_tau_B"]:
             if metric not in g:
                 continue
             slope, intercept = loglog_slope(x, g[metric])
@@ -114,43 +116,41 @@ def _write_confidence_slopes(summary: pd.DataFrame, out: Path) -> None:
 
 def _write_special_figures(summary: pd.DataFrame, figdir: Path, out: Path) -> None:
     name = figdir.name
-    if name == "confidence_scaling_quantile":
+    if name == "fixed_confidence_benchmarks":
+        plot_benchmark_grouped_bars(
+            summary,
+            ["fc_convex2d", "fc_convex3d", "fc_witness4", "fc_witness10"],
+            ["Convex-2D", "Convex-3D", "Witness-4", "Witness-10"],
+            figdir / "benchmark_group_convex_witness.pdf",
+        )
+        plot_benchmark_grouped_bars(
+            summary,
+            [
+                "fc_arena4_small",
+                "fc_arena4_medium",
+                "fc_arena10_medium",
+                "fc_twogroup10_medium",
+            ],
+            ["Arena-4 small", "Arena-4 medium", "Arena-10 medium", "Two-group-10"],
+            figdir / "benchmark_group_arena_twogroup.pdf",
+        )
+    elif name == "confidence_scaling_quantile":
         transform = lambda x: __import__("numpy").log(1.0 / x)
         for exp_id, g in summary.groupby("experiment_id"):
             suffix = _suffix_for_exp(exp_id)
-            plot_tau_quantiles_vs_x(
-                g,
-                "delta",
-                figdir / f"tau_quantiles_vs_log_inv_delta_{suffix}.pdf",
-                x_transform=transform,
-                xlabel="log(1/delta)",
+            transformed = g.assign(
+                log_inv_delta=transform(g["delta"].to_numpy(dtype=float))
             )
-            plot_tau_quantiles_vs_x(
-                g,
-                "delta",
-                figdir / f"norm_tau_quantiles_vs_log_inv_delta_{suffix}.pdf",
-                x_transform=transform,
-                xlabel="log(1/delta)",
-                normalized=True,
-            )
-            if "mean_norm_tau_B_logdelta" in g:
-                plot_metric_vs_x(
-                    g.assign(log_inv_delta=transform(g["delta"].to_numpy(dtype=float))),
-                    "log_inv_delta",
-                    "mean_norm_tau_B_logdelta",
-                    figdir / f"tau_over_log_inv_delta_{suffix}.pdf",
-                    ylabel="mean normalized tau / log(1/delta)",
-                    xlabel="log(1/delta)",
-                )
-        vb = summary[summary["algorithm"] == "VB-EGE-practical"]
-        if not vb.empty and "delta" in vb:
-            plot_metric_vs_x(
-                vb.assign(log_inv_delta=transform(vb["delta"].to_numpy(dtype=float))),
+            plot_stopping_scaling(
+                transformed,
                 "log_inv_delta",
-                "mean_final_phase",
-                figdir / "final_phase_distribution_vs_delta.pdf",
-                ylabel="mean final phase",
-                series_col="experiment_id",
+                figdir / f"tau_mean_ci_vs_log_inv_delta_{suffix}.pdf",
+                xlabel="log(1/delta)",
+            )
+            plot_stopping_scaling_bar(
+                transformed,
+                "log_inv_delta",
+                figdir / f"tau_mean_ci_bar_vs_log_inv_delta_{suffix}.pdf",
                 xlabel="log(1/delta)",
             )
         _write_confidence_slopes(summary, out.with_name(out.stem + "_slopes.csv"))
@@ -162,8 +162,8 @@ def _write_special_figures(summary: pd.DataFrame, figdir: Path, out: Path) -> No
             plot_calibration_heatmap(
                 summary,
                 str(exp_id),
-                "median_tau",
-                figdir / f"heatmap_median_tau_by_constants_{suffix}.pdf",
+                "mean_tau",
+                figdir / f"heatmap_mean_tau_by_constants_{suffix}.pdf",
             )
             plot_calibration_heatmap(
                 summary,
@@ -180,25 +180,12 @@ def _write_special_figures(summary: pd.DataFrame, figdir: Path, out: Path) -> No
     elif name == "pareto_size_ablation":
         for exp_id, g in summary.groupby("experiment_id"):
             suffix = _suffix_for_exp(exp_id)
-            plot_tau_quantiles_vs_x(
+            plot_tau_mean_vs_x(
                 g,
                 "param_s",
                 figdir / f"tau_vs_pareto_size_{suffix}.pdf",
                 xlabel="true Pareto size |P|",
             )
-            plot_tau_quantiles_vs_x(
-                g,
-                "param_s",
-                figdir / f"norm_tau_vs_pareto_size_{suffix}.pdf",
-                xlabel="true Pareto size |P|",
-                normalized=True,
-            )
-        plot_baseline_ratio_vs_x(
-            summary,
-            "param_s",
-            figdir / "baseline_ratio_vs_pareto_size.pdf",
-            xlabel="true Pareto size |P|",
-        )
         vb = summary[summary["algorithm"] == "VB-EGE-practical"]
         if not vb.empty:
             plot_metric_vs_x(
@@ -221,13 +208,13 @@ def _write_special_figures(summary: pd.DataFrame, figdir: Path, out: Path) -> No
         for exp_id, g in summary.groupby("experiment_id"):
             suffix = _suffix_for_exp(exp_id)
             x_col = "mean_achieved_objective_correlation"
-            plot_tau_quantiles_vs_x(
+            plot_tau_mean_vs_x(
                 g,
                 x_col,
                 figdir / f"tau_vs_rho_{suffix}.pdf",
                 xlabel="achieved objective correlation",
             )
-            plot_tau_quantiles_vs_x(
+            plot_tau_mean_vs_x(
                 g,
                 x_col,
                 figdir / f"norm_tau_vs_rho_{suffix}.pdf",
@@ -305,10 +292,31 @@ def main(argv=None):
         plot_mle_sign_accuracy(g, figdir / f"mle_pairwise_sign_accuracy_{exp_id}.pdf")
         for col in ["K", "d", "param_Delta", "delta", "param_s", "param_rho"]:
             if col in g.columns and g[col].nunique(dropna=True) > 1:
-                plot_stopping_scaling(g, col, figdir / f"tau_vs_{col}_{exp_id}.pdf")
+                xlabel = {
+                    "K": "number of arms K",
+                    "d": "number of objectives d",
+                    "param_Delta": "latent separation Delta",
+                    "delta": "target failure probability delta",
+                    "param_s": "target Pareto size |P|",
+                    "param_rho": "target objective correlation rho",
+                }.get(col, col)
+                plot_stopping_scaling(
+                    g,
+                    col,
+                    figdir / f"tau_vs_{col}_{exp_id}.pdf",
+                    xlabel=xlabel,
+                )
+                if figdir.name == "fixed_confidence_scaling":
+                    plot_stopping_scaling_bar(
+                        g,
+                        col,
+                        figdir / f"tau_bar_vs_{col}_{exp_id}.pdf",
+                        xlabel=xlabel,
+                    )
     plot_pair_cell_coverage_effect(summary, figdir / "pair_cell_coverage_effect.pdf")
     plot_paired_ratio_by_setting(paired, figdir / "paired_ratio_by_setting.pdf")
-    _write_slopes(summary, out.with_name(out.stem + "_slopes.csv"))
+    if figdir.name != "fixed_confidence_benchmarks":
+        _write_slopes(summary, out.with_name(out.stem + "_slopes.csv"))
     _write_special_figures(summary, figdir, out)
     print(f"wrote summary to {out}")
 

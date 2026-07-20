@@ -23,7 +23,7 @@ def _as_rng(rng=None):
 
 
 def _balanced_counts(num_cells: int, budget: int, rng: np.random.Generator) -> np.ndarray:
-    counts = np.full(num_cells, budget // num_cells, dtype=int)
+    counts = np.full(num_cells, budget // num_cells, dtype=np.int64)
     rem = budget % num_cells
     if rem:
         extra = rng.choice(num_cells, size=rem, replace=False)
@@ -132,7 +132,7 @@ def run_uniform_focal_borda_fc(theta, config=None, rng=None) -> dict:
     theta = np.asarray(theta, dtype=float)
     K, d = theta.shape
     b = borda(theta)
-    N = np.zeros((K, d), dtype=int)
+    N = np.zeros((K, d), dtype=np.int64)
     S = np.zeros((K, d), dtype=float)
     history: list[dict] = []
     tau = 0
@@ -213,13 +213,13 @@ def allocate_pair_coordinate_budget(
 ) -> np.ndarray:
     rng = _as_rng(rng)
     budget = int(budget)
-    counts = np.zeros((d, K, K), dtype=int)
+    counts = np.zeros((d, K, K), dtype=np.int64)
     cells = _pair_cells(K, d)
     C = len(cells)
     if scheme == "balanced_random":
         flat_counts = _balanced_counts(C, budget, rng)
     elif scheme == "with_replacement":
-        flat_counts = np.zeros(C, dtype=int)
+        flat_counts = np.zeros(C, dtype=np.int64)
         if budget:
             draws = rng.integers(0, C, size=budget)
             np.add.at(flat_counts, draws, 1)
@@ -234,8 +234,8 @@ def simulate_pairwise_counts(theta, counts: np.ndarray, rng) -> tuple[np.ndarray
     rng = _as_rng(rng)
     theta = np.asarray(theta, dtype=float)
     d, K, _ = counts.shape
-    W = np.zeros((d, K, K), dtype=int)
-    Npair = np.zeros((d, K, K), dtype=int)
+    W = np.zeros((d, K, K), dtype=np.int64)
+    Npair = np.zeros((d, K, K), dtype=np.int64)
     for r in range(d):
         for i in range(K):
             for j in range(i + 1, K):
@@ -352,8 +352,8 @@ def run_uniform_pairwise_bt_mle_fc(theta, config=None, rng=None) -> dict:
     mle_config, allocation = _mle_config_from(config)
     if allocation != "balanced_random":
         raise ValueError("fixed-confidence pairwise MLE currently uses balanced per-cell rounds")
-    W = np.zeros((d, K, K), dtype=int)
-    Npair = np.zeros((d, K, K), dtype=int)
+    W = np.zeros((d, K, K), dtype=np.int64)
+    Npair = np.zeros((d, K, K), dtype=np.int64)
     C = d * K * (K - 1) // 2
     history: list[dict] = []
     tau = 0
@@ -463,8 +463,8 @@ def run_uniform_pairwise_bt_borda_plugin_fc(theta, config=None, rng=None) -> dic
     fc_config = _fc_config_from(config)
     if fc_config.allocation_scheme != "balanced_random":
         raise ValueError("fixed-confidence pairwise Borda currently uses balanced per-cell rounds")
-    W = np.zeros((d, K, K), dtype=int)
-    Npair = np.zeros((d, K, K), dtype=int)
+    W = np.zeros((d, K, K), dtype=np.int64)
+    Npair = np.zeros((d, K, K), dtype=np.int64)
     C = d * K * (K - 1) // 2
     history: list[dict] = []
     tau = 0

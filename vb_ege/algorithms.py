@@ -93,7 +93,7 @@ def run_vb_ege(theta, config: VBEGEConfig, rng=None) -> VBEGEResult:
     active = list(range(K))
     accepted: set[int] = set()
     rejected: set[int] = set()
-    N = np.zeros((K, d), dtype=int)
+    N = np.zeros((K, d), dtype=np.int64)
     S = np.zeros((K, d), dtype=float)
     history: list[dict] = []
     tau = 0

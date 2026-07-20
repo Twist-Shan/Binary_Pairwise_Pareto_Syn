@@ -119,20 +119,27 @@ def _write_special_figures(summary: pd.DataFrame, figdir: Path, out: Path) -> No
     if name == "fixed_confidence_benchmarks":
         plot_benchmark_grouped_bars(
             summary,
-            ["fc_convex2d", "fc_convex3d", "fc_witness4", "fc_witness10"],
-            ["Convex-2D", "Convex-3D", "Witness-4", "Witness-10"],
-            figdir / "benchmark_group_convex_witness.pdf",
-        )
-        plot_benchmark_grouped_bars(
-            summary,
             [
+                "fc_convex2d",
+                "fc_convex3d",
+                "fc_witness4",
+                "fc_witness10",
                 "fc_arena4_small",
                 "fc_arena4_medium",
                 "fc_arena10_medium",
                 "fc_twogroup10_medium",
             ],
-            ["Arena-4 small", "Arena-4 medium", "Arena-10 medium", "Two-group-10"],
-            figdir / "benchmark_group_arena_twogroup.pdf",
+            [
+                "Convex-2D",
+                "Convex-3D",
+                "Witness-4",
+                "Witness-10",
+                "Arena-4\nsmall",
+                "Arena-4\nmedium",
+                "Arena-10\nmedium",
+                "Two-group-10",
+            ],
+            figdir / "benchmark_group_all.pdf",
         )
     elif name == "confidence_scaling_quantile":
         transform = lambda x: __import__("numpy").log(1.0 / x)

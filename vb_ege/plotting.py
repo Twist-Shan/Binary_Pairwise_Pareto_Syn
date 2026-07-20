@@ -141,7 +141,7 @@ def _shade_mean_ribbon(
         plt.plot(x, upper, color=fill_color, alpha=0.95, linewidth=0.75, zorder=2)
 
 
-def _add_legend_below(ncol: int = 2) -> None:
+def _add_legend_below(ncol: int = 2, fontsize: float = 7.5) -> None:
     ax = plt.gca()
     handles, labels = ax.get_legend_handles_labels()
     if not handles:
@@ -153,7 +153,7 @@ def _add_legend_below(ncol: int = 2) -> None:
         bbox_to_anchor=(0.5, -0.18),
         ncol=min(ncol, len(labels)),
         frameon=False,
-        fontsize=7.5,
+        fontsize=fontsize,
         columnspacing=1.1,
         handlelength=2.0,
     )
@@ -433,7 +433,8 @@ def plot_benchmark_grouped_bars(
     algorithms = _ordered_algorithms(df)
     centers = np.arange(len(setting_ids), dtype=float)
     width = 0.78 / max(1, len(algorithms))
-    plt.figure(figsize=(9.0, 5.1))
+    is_wide = len(setting_ids) > 4
+    plt.figure(figsize=(14.2, 5.4) if is_wide else (9.0, 5.1))
     for index, algorithm in enumerate(algorithms):
         g = df[df["algorithm"] == algorithm].set_index("experiment_id").reindex(setting_ids)
         values = g["mean_tau"].to_numpy(dtype=float)
@@ -459,10 +460,14 @@ def plot_benchmark_grouped_bars(
             line_color,
         )
     plt.yscale("log")
-    plt.xticks(centers, setting_labels)
-    plt.xlabel("benchmark setting")
-    plt.ylabel("mean stopping time")
-    _add_legend_below()
+    plt.xticks(centers, setting_labels, fontsize=10.5 if is_wide else None)
+    plt.yticks(fontsize=10.5 if is_wide else None)
+    plt.xlabel("benchmark setting", fontsize=12 if is_wide else None)
+    plt.ylabel("mean stopping time", fontsize=12 if is_wide else None)
+    if is_wide:
+        _add_legend_below(ncol=4, fontsize=10.0)
+    else:
+        _add_legend_below()
     _savefig(outpath)
 
 

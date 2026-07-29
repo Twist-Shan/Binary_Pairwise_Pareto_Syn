@@ -1,0 +1,27 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+results/**
+!results/raw/
+!results/summary/
+!results/figures/
+!results/raw/.gitkeep
+!results/summary/.gitkeep
+!results/figures/.gitkeep
+report/tmp/
+report/*.tex
+report/figures_certificate_v1/*
+report/*.aux
+report/*.fdb_latexmk
+report/*.fls
+report/*.log
+report/*.out
+report/*.synctex.gz
+report/*_red_blue.pdf
+report/*_macaron.pdf
+
+# Superseded local reports retained outside the published repository.
+report/build_certificate_v1_figures.py
+report/build_report.py
+report/certificate_v1_smoke_report.pdf
+report/formal_vbege_vs_pareto_bt_glr.pdf

@@ -34,6 +34,7 @@ def main() -> None:
     identity_candidates = [
         "replicate_id",
         "algorithm",
+        "seed",
         "budget",
         "delta",
         "sample_const",

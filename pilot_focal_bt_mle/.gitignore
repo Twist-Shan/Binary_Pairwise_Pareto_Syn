@@ -1,0 +1,32 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+results/**
+!results/raw/
+!results/summary/
+!results/figures/
+!results/raw/.gitkeep
+!results/summary/.gitkeep
+!results/figures/.gitkeep
+report/*.aux
+report/*.fdb_latexmk
+report/*.fls
+report/*.log
+report/*.out
+report/*.synctex.gz
+report/tmp/
+
+# Historical pilot-study drivers and reports are kept locally. The published
+# package retains only the constrained BT profile utilities used by the current
+# Pareto BT-GLR extension.
+FC_RESULTS.md
+RESULTS.md
+audit_conventions.py
+config.yaml
+fc_suite.yaml
+paper_instances.py
+pareto_track_and_stop.py
+run_fc_suite.py
+run_pilot.py
+sequential_fc.py
+report/

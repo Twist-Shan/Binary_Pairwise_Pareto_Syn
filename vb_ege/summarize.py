@@ -46,7 +46,7 @@ def _read_raw(path: str) -> pd.DataFrame:
 
 def _write_slopes(summary: pd.DataFrame, out: Path) -> None:
     rows = []
-    for exp_id, g in summary.groupby("experiment_id"):
+    for (exp_id, algorithm), g in summary.groupby(["experiment_id", "algorithm"]):
         candidates = [
             ("K", "K"),
             ("d", "d"),
@@ -67,6 +67,7 @@ def _write_slopes(summary: pd.DataFrame, out: Path) -> None:
                 rows.append(
                     {
                         "experiment_id": exp_id,
+                        "algorithm": algorithm,
                         "sweep_var": name,
                         "slope": slope,
                         "intercept": intercept,

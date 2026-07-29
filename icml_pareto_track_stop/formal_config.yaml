@@ -1,0 +1,31 @@
+name: formal_vbege_vs_pareto_bt_glr
+
+source_protocols:
+  - section: fixed_confidence_scaling
+    config: configs/fixed_confidence_scaling.yaml
+  - section: confidence_scaling_quantiles
+    config: configs/confidence_scaling_quantile.yaml
+  - section: fixed_confidence_benchmarks
+    config: configs/fixed_confidence_benchmarks.yaml
+  - section: pareto_size_ablation
+    config: configs/pareto_size_ablation.yaml
+
+track_stop:
+  box_bound: 2.0
+  mixture_lambda: 0.1
+  sigma2: 0.25
+  burnin_per_cell: 2
+  growth_factor: 1.8
+  max_queries: 1000000000000000000
+  mirror_step: 0.8
+  forced_exploration_power: 0.3333333333333333
+  optimizer_tol: 1.0e-7
+  optimizer_max_iter: 1000
+  max_phases: 96
+  max_exact_add_assignments: 4096
+  max_certificate_pool: 64
+  certificate_local_search_passes: 2
+  profile_interval_atol: 1.0e-7
+  profile_interval_rtol: 1.0e-5
+  exact_profile_max_arms: 8
+  screened_certificate_pool: 8

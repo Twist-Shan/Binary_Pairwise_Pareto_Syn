@@ -23,13 +23,19 @@ ENV/
 .ipynb_checkpoints/
 .ipython/
 
-# Experiment outputs
-results/raw/*
-results/summary/*
-results/figures/*
-!results/raw/.gitkeep
-!results/summary/.gitkeep
-!results/figures/.gitkeep
+# Experiment outputs. The repository keeps configurations, code, README files,
+# and final report PDFs; raw rows and regenerated plots remain local.
+**/results/raw/**
+**/results/summary/**
+**/results/figures/**
+**/results/summary_certificate/**
+**/results/figures_certificate/**
+**/results/smoke_certificate/**
+**/results/fixed_confidence/**
+**/results/audits/**
+!**/results/raw/.gitkeep
+!**/results/summary/.gitkeep
+!**/results/figures/.gitkeep
 
 # Large/generated numeric artifacts
 *.parquet
@@ -40,6 +46,7 @@ results/figures/*
 *.npz
 *.pkl
 *.pickle
+*.jsonl
 
 # Logs and temporary files
 *.log
@@ -56,8 +63,9 @@ Thumbs.db
 desktop.ini
 .vscode/
 .idea/
+tmp/
 
-# Synthetic report deliverable
+# Main synthetic report deliverable. The generator lives in scripts/.
 report/**
 !report/
-!report/*.pdf
+!report/synthetic_fixed_confidence_report.pdf

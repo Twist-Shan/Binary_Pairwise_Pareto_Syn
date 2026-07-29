@@ -1,24 +1,38 @@
-# Retained Synthetic Results
+# Generated Results
 
-This directory contains only the experiment outputs used by the final synthetic report.
+This directory is the local output root for the main synthetic experiments.
+Large generated files are intentionally excluded from Git; only this guide is
+versioned.
 
-## Raw CSVs
+## Expected structure
 
-- `fixed_confidence_scaling.csv`: fixed-confidence scaling in `K`, `d`, and `Delta`, with `delta=0.05` fixed.
-- `confidence_scaling_quantile.csv`: the separate confidence sweep over `delta`.
-- `constants_calibration.csv`: practical-constant sensitivity experiments.
-- `fixed_confidence_benchmarks.csv`: Convex, Witness, Arena, and Two-group benchmarks.
-- `pareto_size_ablation.csv`: Arena-4 and Arena-10 Pareto-size sweeps.
-- `theory_constants_sanity.csv`: practical versus theory-style constants.
+```text
+results/
+  raw/       Run-level CSV files
+  summary/   Aggregate, paired, slope, and diagnostic tables
+  figures/   PDF and PNG plots generated from the summaries
+```
 
-The CSVs are the final merged versions. JSONL checkpoints, smoke runs, repair shards, correlated-arena runs, and under-budget runs were removed after validation because they are not part of the final report.
+The canonical completed suites are:
 
-## Summaries
+- `fixed_confidence_scaling`;
+- `confidence_scaling_quantile`;
+- `fixed_confidence_benchmarks`;
+- `constants_calibration`;
+- `pareto_size_ablation`;
+- `theory_constants_sanity`.
 
-`summary/` contains the corresponding aggregate tables. The main stopping-time statistic is mean plus or minus one standard error. Paired files report baseline/VB-EGE mean ratios with cluster-aware standard errors when repeated observations share a latent instance.
+Raw JSONL checkpoints, extension shards, repair files, and instance-bank caches
+are intermediate artifacts. They may be removed once the final CSV has been
+validated and are never required for reading the committed report PDF.
 
-## Figures
+Summaries report mean stopping time plus or minus one standard error. Repeated
+observations from a shared latent instance use latent-instance clustered
+standard errors; independent-instance suites use ordinary replication standard
+errors. Paired files report baseline/VB-EGE stopping-time ratios under the same
+clustering rule.
 
-`figures/` retains only figures referenced by the report, in both PDF and PNG formats. Normalized duplicates, old median/IQR figures, and figures for removed experiments are intentionally omitted.
-
-The final compiled report is `../report/synthetic_fixed_confidence_report.pdf`.
+The final main report is
+[`../report/synthetic_fixed_confidence_report.pdf`](../report/synthetic_fixed_confidence_report.pdf).
+Reproduction commands and protocol details are in the repository
+[`README`](../README.md).

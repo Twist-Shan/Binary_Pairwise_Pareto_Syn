@@ -36,7 +36,7 @@ algorithms:
 sweeps:
   - id: fc_K_scaling_d4
     generator: symmetric_hard
-    n_reps: 200
+    n_reps: 500
     grid:
       K: [16, 32, 64, 128]
       d: [4]
@@ -45,7 +45,7 @@ sweeps:
 
   - id: fc_d_scaling_K64
     generator: symmetric_hard
-    n_reps: 200
+    n_reps: 500
     grid:
       K: [64]
       d: [2, 4, 10]
@@ -54,7 +54,7 @@ sweeps:
 
   - id: fc_gap_scaling_K64_d10
     generator: symmetric_hard
-    n_reps: 200
+    n_reps: 500
     grid:
       K: [64]
       d: [10]

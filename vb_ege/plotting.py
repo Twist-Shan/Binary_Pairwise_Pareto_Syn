@@ -380,6 +380,114 @@ def plot_stopping_scaling(summary_df, sweep_var, outpath, xlabel: str | None = N
     _savefig(outpath)
 
 
+def plot_symmetric_hard_scaling_grid(scaling_summary, confidence_summary, outpath):
+    panels = [
+        (
+            scaling_summary[scaling_summary["experiment_id"] == "fc_K_scaling_d4"],
+            "K",
+            None,
+            "number of arms K",
+            "(a) K scaling",
+            True,
+        ),
+        (
+            scaling_summary[scaling_summary["experiment_id"] == "fc_d_scaling_K64"],
+            "d",
+            None,
+            "number of objectives d",
+            "(b) d scaling",
+            True,
+        ),
+        (
+            scaling_summary[scaling_summary["experiment_id"] == "fc_gap_scaling_K64_d10"],
+            "param_Delta",
+            None,
+            r"latent separation $\Delta$",
+            "(c) Gap scaling",
+            True,
+        ),
+        (
+            confidence_summary[
+                confidence_summary["experiment_id"] == "conf_quantile_symmetric_K64_d10"
+            ],
+            "delta",
+            lambda values: np.log(1.0 / values),
+            r"$\log(1/\delta)$",
+            "(d) Confidence scaling",
+            False,
+        ),
+    ]
+    if any(panel[0].empty for panel in panels):
+        return
+
+    fig, axes = plt.subplots(2, 2, figsize=(11.2, 7.8))
+    legend_handles = []
+    legend_labels = []
+    for panel_index, (ax, panel) in enumerate(zip(axes.flat, panels)):
+        df, x_col, transform, xlabel, title, log_x = panel
+        df = df.dropna(subset=[x_col, "mean_tau"]).copy()
+        df["_x"] = df[x_col].astype(float)
+        if transform is not None:
+            df["_x"] = transform(df["_x"].to_numpy(dtype=float))
+
+        for algorithm in _ordered_algorithms(df):
+            g = df[df["algorithm"] == algorithm].sort_values("_x")
+            x = g["_x"].to_numpy(dtype=float)
+            y = g["mean_tau"].to_numpy(dtype=float)
+            lower, upper = _mean_se_bounds(g)
+            fill_color = _fill_color(algorithm)
+            line_color = _line_color(algorithm)
+            ax.fill_between(x, lower, upper, color=fill_color, alpha=0.48, linewidth=0, zorder=1)
+            if np.any(np.isfinite(upper - lower) & ((upper - lower) > 0)):
+                ax.plot(x, lower, color=fill_color, alpha=0.95, linewidth=0.7, zorder=2)
+                ax.plot(x, upper, color=fill_color, alpha=0.95, linewidth=0.7, zorder=2)
+            (line,) = ax.plot(
+                x,
+                y,
+                marker=ALGORITHM_MARKERS.get(algorithm, "o"),
+                linestyle=ALGORITHM_LINESTYLES.get(algorithm, "-"),
+                linewidth=1.9,
+                color=line_color,
+                markerfacecolor=("white" if algorithm == "UniformFocalBorda-FC" else fill_color),
+                markeredgecolor=line_color,
+                markeredgewidth=0.9,
+                markersize=5.2 if algorithm == "UniformFocalBorda-FC" else 4.6,
+                zorder=3,
+                label=_algorithm_label(algorithm),
+            )
+            if panel_index == 0:
+                legend_handles.append(line)
+                legend_labels.append(_algorithm_label(algorithm))
+
+        if log_x:
+            ax.set_xscale("log")
+        ax.set_yscale("log")
+        ax.set_xlabel(xlabel, fontsize=10.5)
+        if panel_index % 2 == 0:
+            ax.set_ylabel("mean stopping time", fontsize=10.5)
+        ax.set_title(title, fontsize=11.5)
+        ax.tick_params(axis="both", labelsize=9.5)
+
+    fig.legend(
+        legend_handles,
+        legend_labels,
+        loc="lower center",
+        bbox_to_anchor=(0.5, 0.01),
+        ncol=4,
+        frameon=False,
+        fontsize=9.5,
+        columnspacing=1.5,
+        handlelength=2.2,
+    )
+    fig.tight_layout(rect=(0, 0.075, 1, 1), h_pad=2.0, w_pad=1.6)
+    outpath = Path(outpath)
+    outpath.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(outpath, bbox_inches="tight", pad_inches=0.04)
+    alt = outpath.with_suffix(".png" if outpath.suffix.lower() == ".pdf" else ".pdf")
+    fig.savefig(alt, dpi=220, bbox_inches="tight", pad_inches=0.04)
+    plt.close(fig)
+
+
 def plot_stopping_scaling_bar(summary_df, sweep_var, outpath, xlabel: str | None = None):
     df = summary_df.dropna(subset=[sweep_var, "mean_tau"]).copy()
     if df.empty:

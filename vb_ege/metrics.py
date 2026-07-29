@@ -78,7 +78,7 @@ def _mean_tau_uncertainty(g: pd.DataFrame) -> dict[str, float | int | str]:
             }
         ).dropna(subset=["tau", "instance_id"])
         num_instances = clustered["instance_id"].nunique(dropna=True)
-        if 1 < num_instances < len(clustered):
+        if len(clustered) == len(values) and 1 < num_instances < len(clustered):
             cluster_means = clustered.groupby("instance_id", dropna=True)["tau"].mean()
             effective_n = len(cluster_means)
             se_tau = float(cluster_means.std(ddof=1) / np.sqrt(effective_n))
@@ -259,15 +259,30 @@ def paired_tau_ratios(
         or c.startswith("meta_")
     )
 
-    if "replicate_id" in work and work["replicate_id"].notna().all():
-        work["_pair_id"] = work["replicate_id"].astype(str)
+    sort_cols = [c for c in ["run_id"] if c in work.columns]
+    if sort_cols:
+        work = work.sort_values(sort_cols)
+    if "replicate_id" in work and work["replicate_id"].notna().any():
+        has_replicate_id = work["replicate_id"].notna()
+        work["_pair_id"] = pd.Series(index=work.index, dtype=object)
+        work.loc[has_replicate_id, "_pair_id"] = (
+            "replicate:"
+            + work.loc[has_replicate_id, "replicate_id"].astype(str)
+        )
+        if (~has_replicate_id).any():
+            legacy_pair_id = work.loc[~has_replicate_id].groupby(
+                design_cols + ["algorithm"], dropna=False
+            ).cumcount()
+            work.loc[~has_replicate_id, "_pair_id"] = (
+                "legacy:" + legacy_pair_id.astype(str)
+            )
     else:
-        sort_cols = [c for c in ["run_id"] if c in work.columns]
-        if sort_cols:
-            work = work.sort_values(sort_cols)
-        work["_pair_id"] = work.groupby(
-            design_cols + ["algorithm"], dropna=False
-        ).cumcount()
+        work["_pair_id"] = (
+            "legacy:"
+            + work.groupby(design_cols + ["algorithm"], dropna=False)
+            .cumcount()
+            .astype(str)
+        )
 
     records: list[dict] = []
     for key, g in work.groupby(design_cols, dropna=False):

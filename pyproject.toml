@@ -5,6 +5,8 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "vb-ege-synthetic"
 version = "0.1.0"
+description = "Fixed-confidence synthetic experiments for binary pairwise Pareto-set identification"
+readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
   "numpy",
@@ -18,7 +20,15 @@ dependencies = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["vb_ege*"]
+include = ["vb_ege*", "icml_pareto_track_stop*", "pilot_focal_bt_mle*"]
+exclude = [
+  "icml_pareto_track_stop.results*",
+  "pilot_focal_bt_mle.results*",
+  "pilot_focal_bt_mle.report*",
+]
+
+[tool.setuptools.package-data]
+icml_pareto_track_stop = ["*.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

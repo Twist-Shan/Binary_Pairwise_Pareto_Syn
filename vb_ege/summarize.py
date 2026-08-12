@@ -277,6 +277,11 @@ def main(argv=None):
     parser.add_argument("--raw", required=True)
     parser.add_argument("--out", required=True)
     parser.add_argument("--figdir", required=True)
+    parser.add_argument(
+        "--skip-figures",
+        action="store_true",
+        help="regenerate summary tables and slopes without touching figure files",
+    )
     args = parser.parse_args(argv)
 
     raw = _read_raw(args.raw)
@@ -289,6 +294,16 @@ def main(argv=None):
     if not paired.empty:
         paired.to_csv(paired_out, index=False)
     figdir = Path(args.figdir)
+    if args.skip_figures:
+        if figdir.name != "fixed_confidence_benchmarks":
+            _write_slopes(summary, out.with_name(out.stem + "_slopes.csv"))
+        if figdir.name == "confidence_scaling_quantile":
+            _write_confidence_slopes(
+                summary, out.with_name(out.stem + "_slopes.csv")
+            )
+        print(f"wrote summary to {out} (figures unchanged)")
+        return
+
     figdir.mkdir(parents=True, exist_ok=True)
 
     for exp_id, g in summary.groupby("experiment_id"):

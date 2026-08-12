@@ -13,8 +13,8 @@ from .gaps import empirical_pareto_and_gaps
 @dataclass
 class VBEGEConfig:
     delta: float
-    sample_const: float = 8.0
-    threshold_const: float = 16.0
+    sample_const: float = 2.0
+    threshold_const: float = 4.0
     log_const: float = 4.0
     max_phases: int = 60
     max_queries: int | None = None
@@ -52,7 +52,11 @@ def choose_removal_arm(
 
     emp_pareto = set(empirical_pareto)
     max_gap = max(gap_by_arm[i] for i in active)
-    candidates = [i for i in active if np.isclose(gap_by_arm[i], max_gap)]
+    # Algorithm 1 applies the non-Pareto-first rule only to exact empirical
+    # gap maximizers.  ``np.isclose`` is deliberately not used here: it can
+    # admit a strictly smaller gap and therefore remove an arm outside the
+    # mathematical argmax.
+    candidates = [i for i in active if gap_by_arm[i] == max_gap]
     if tie_break_nonpareto_first:
         nonpareto = [i for i in candidates if i not in emp_pareto]
         if nonpareto:

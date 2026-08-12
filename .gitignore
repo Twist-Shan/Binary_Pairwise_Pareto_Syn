@@ -23,8 +23,21 @@ ENV/
 .ipynb_checkpoints/
 .ipython/
 
+# Local editor/agent state and development scratch space. These are never
+# research artifacts and must not enter a release commit.
+.codex/
+.agents/
+.cursor/
+.vscode/
+.idea/
+work/
+scratch/
+debug/
+tmp/
+
 # Experiment outputs. The repository keeps configurations, code, README files,
 # and final report PDFs; raw rows and regenerated plots remain local.
+**/results/
 **/results/raw/**
 **/results/summary/**
 **/results/figures/**
@@ -50,6 +63,11 @@ ENV/
 
 # Logs and temporary files
 *.log
+*.aux
+*.fls
+*.fdb_latexmk
+*.out
+*.synctex.gz
 *.tmp
 *.temp
 *.bak
@@ -61,11 +79,23 @@ ENV/
 .DS_Store
 Thumbs.db
 desktop.ini
-.vscode/
-.idea/
-tmp/
-
 # Main synthetic report deliverable. The generator lives in scripts/.
 report/**
 !report/
 !report/synthetic_fixed_confidence_report.pdf
+
+# Historical exploratory extensions are intentionally not part of the paper
+# release. Keep only the explicitly tracked, documented core files.
+pilot_focal_bt_mle/**
+!pilot_focal_bt_mle/
+!pilot_focal_bt_mle/__init__.py
+!pilot_focal_bt_mle/README.md
+!pilot_focal_bt_mle/matched_fixed_budget.py
+!pilot_focal_bt_mle/test_matched_fixed_budget.py
+
+# The formal report has one curated PDF plus its tracked generator. Alternate
+# drafts, smoke reports, and TeX build products remain local.
+icml_pareto_track_stop/report/**
+!icml_pareto_track_stop/report/
+!icml_pareto_track_stop/report/build_certificate_v1_formal_report.py
+!icml_pareto_track_stop/report/formal_certificate_v1_report.pdf

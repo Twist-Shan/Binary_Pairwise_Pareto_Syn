@@ -54,7 +54,7 @@ ALGORITHM_LABELS = {
     "UniformPairwiseBT-BordaPlugIn-FC": "Borda plug-in",
     "UniformPairwiseBT-MLE-Cert": "BT-MLE",
     "VB-EGE-practical": "VB-EGE",
-    "VB-EGE-theory": "Theory-style",
+    "VB-EGE-theory": "Conservative constants",
 }
 MACARON_SERIES_COLORS = [
     "#8EC5E8",
@@ -1030,7 +1030,7 @@ def plot_fixed_confidence_tau(summary_df, outpath):
         )
     plt.yscale("log")
     plt.ylabel("mean stopping time")
-    plt.title("Practical vs theory-style constants")
+    plt.title("Paper vs conservative constants")
     plt.xticks(centers, labels)
     _savefig(outpath)
 

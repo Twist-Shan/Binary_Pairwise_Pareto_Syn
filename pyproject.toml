@@ -4,20 +4,22 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vb-ege-synthetic"
-version = "0.1.0"
-description = "Fixed-confidence synthetic experiments for binary pairwise Pareto-set identification"
+version = "0.2.0"
+description = "Synthetic experiments for Beyond Scalar Leaderboards"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-  "numpy",
-  "pandas",
-  "scipy",
-  "matplotlib",
-  "pytest",
-  "pyyaml",
-  "tqdm",
-  "pyarrow",
+  "numpy>=1.26,<3",
+  "pandas>=2.2,<3",
+  "scipy>=1.13,<2",
+  "matplotlib>=3.8,<4",
+  "pyyaml>=6,<7",
+  "tqdm>=4.66,<5",
+  "pyarrow>=16,<23",
 ]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10"]
 
 [tool.setuptools.packages.find]
 include = ["vb_ege*", "icml_pareto_track_stop*", "pilot_focal_bt_mle*"]

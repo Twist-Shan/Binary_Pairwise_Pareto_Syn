@@ -1,3 +1,6 @@
+# Historical filename retained for artifact compatibility. In the current
+# paper, (2,4,4) are the Algorithm 1 / Theorem 4.1 constants; (8,16,4) is a
+# deliberately more conservative sensitivity profile.
 name: theory_constants_sanity
 base_seed: 20260708
 
@@ -8,6 +11,7 @@ algorithms:
     threshold_const: 4.0
     log_const: 4.0
     max_phases: 45
+  # Historical raw algorithm label retained for existing artifact schemas.
   VB-EGE-theory:
     delta: 0.05
     sample_const: 8.0

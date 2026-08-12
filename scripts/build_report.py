@@ -644,7 +644,7 @@ def calibration_result_table(rows: list[dict[str, str]]) -> str:
     ratio_lines = [
         r"\begin{table}[H]",
         r"\centering",
-        r"\caption{Constant-sensitivity baseline ratios at the default practical constants. Ratios compare mean stopping times; values above one favor VB-EGE. Every tested constant pair has zero observed error, so the sweep is a sensitivity analysis rather than an identified efficiency--reliability frontier.}",
+        r"\caption{Constant-sensitivity baseline ratios at the paper constants. Ratios compare mean stopping times; values above one favor VB-EGE. Every tested constant pair has zero observed error, so the sweep is a sensitivity analysis rather than an identified efficiency--reliability frontier.}",
         r"\label{tab:calibration-results-ratios}",
         r"\small",
         r"\begin{tabular}{lrr}",
@@ -698,12 +698,12 @@ def theory_constants_result_table(rows: list[dict[str, str]]) -> str:
     lines = [
         r"\begin{table}[H]",
         r"\centering",
-        r"\caption{Theory/practical constants sanity check. Both variants use the same instances and observation replications. The theory-style constants are $(c_s,c_\theta,c_{\log})=(8,16,4)$ and the practical constants are $(2,4,4)$.}",
+        r"\caption{Paper/conservative constants sensitivity check. Both variants use the same instances and observation replications. The paper constants are $(c_s,c_\theta,c_{\log})=(2,4,4)$ and the more conservative profile is $(8,16,4)$. Historical raw algorithm labels are retained for artifact compatibility.}",
         r"\label{tab:theory-constants}",
         r"\small",
         r"\begin{tabular}{lrrr}",
         r"\toprule",
-        r"Setting & Practical mean $\tau$ (SE) & Theory mean $\tau$ (SE) & Theory/practical \\",
+        r"Setting & Paper mean $\tau$ (SE) & Conservative mean $\tau$ (SE) & Conservative/paper \\",
         r"\midrule",
     ]
     for exp_id, label in settings:
@@ -918,7 +918,7 @@ H_B=\sum_i\Delta_i(B)^{-2},
 with $H_B=\infty$ when a gap is non-positive or non-finite. Large $H_B$ means
   that one or more arms lie close to the Pareto decision boundary.
 
-All fixed-confidence methods use the same practical constants:
+All fixed-confidence methods use the paper's common constants:
 $c_{\mathrm{samp}}=2$, $c_{\mathrm{thr}}=4$, and $c_{\log}=4$. In phase $m$,
 with cell count $C$, the schedule is
 \[
@@ -933,19 +933,14 @@ the threshold constant $c_{\mathrm{thr}}$ is the certificate margin. A
 fixed-confidence baseline stops when its estimated minimum gap satisfies
 $\widehat{\Delta}_{\min}>c_{\mathrm{thr}}r_m$.
 
-\paragraph{Practical versus theory constants.}
-The proof-oriented schedule uses larger universal constants to preserve a
-worst-case concentration argument uniformly over arms, objectives, and phases;
-the explicit theory-style sanity check uses $(8,16,4)$. Our default
-$(c_{\mathrm{samp}},c_{\mathrm{thr}},c_{\log})=(2,4,4)$ is therefore
-less conservative than the theory-style setting rather than numerically
-identical to it. This is reasonable for the finite synthetic regime because it
-keeps the same phase schedule and $\log(1/\delta)$ dependence, uses one fixed
-choice for VB-EGE and the comparable stopping certificates, and was checked by
-the constant-sensitivity and theory-constant experiments. The choice is not
-retuned by benchmark or algorithm. Except for the sections explicitly varying
-constants, every scaling, confidence, benchmark, and Pareto-set-size sensitivity experiment uses
-this same practical choice.
+\paragraph{Paper versus conservative constants.}
+Algorithm~1 and Theorem~4.1 use
+$(c_{\mathrm{samp}},c_{\mathrm{thr}},c_{\log})=(2,4,4)$. The historical
+``theory constants'' artifact additionally evaluates $(8,16,4)$ as a more
+conservative sensitivity profile; it is not the theorem configuration in the
+current paper. The main choice is not retuned by benchmark or algorithm.
+Except for sections explicitly varying constants, every scaling, confidence,
+benchmark, and Pareto-set-size experiment uses $(2,4,4)$.
 
 \paragraph{Benchmark implementations.}
 The three benchmarks other than VB-EGE are implemented as follows.
@@ -1430,8 +1425,8 @@ def generate_tex() -> str:
         (
             r"The sample constant $c_s$ multiplies the phase sample count, the threshold constant "
             r"$c_\theta$ scales the certificate margin, and $c_{\log}$ scales the logarithmic safety "
-            r"term. The practical choice is $(c_s,c_\theta,c_{\log})=(2,4,4)$; the explicit "
-            r"theory-style check uses $(8,16,4)$. Heatmap colors encode mean stopping time and each "
+            r"term. The paper choice is $(c_s,c_\theta,c_{\log})=(2,4,4)$; the explicit "
+            r"conservative-constant check uses $(8,16,4)$. Heatmap colors encode mean stopping time and each "
             r"cell prints mean $\pm$ one standard error. In the two bar panels, the darker overlay "
             r"also spans mean $\pm$ one standard error."
         ),
@@ -1481,17 +1476,17 @@ def generate_tex() -> str:
         (
             "Conclusion. The grid identifies stopping-time sensitivity, not a reliability "
             "frontier, because no failures are observed. Smaller constants are faster, while "
-            "the pre-specified practical constants remain the common main-run setting."
+            "the pre-specified paper constants remain the common main-run setting."
         ),
         theory_constants_result_table(theory_rows),
         figure_grid(
-            "Practical and theory-style constants on small instances.",
+            "Paper and conservative constants on small instances.",
             "fig:theory-constants",
             [
                 ("theory_constants_symmetric.pdf", "Symmetric K16 d4"),
                 ("theory_constants_arena4.pdf", "Arena-4 K16"),
             ],
-            r"Darker overlays span mean $\pm$ one standard error; the theory-style constants are deliberately more conservative.",
+            r"Darker overlays span mean $\pm$ one standard error; the $(8,16,4)$ sensitivity profile is deliberately more conservative.",
             placement="H",
         ),
         r"\clearpage",

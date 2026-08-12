@@ -31,6 +31,26 @@ def test_tie_break_nonpareto_first_unit():
     assert choose_removal_arm(active, gap_by_arm, empirical_pareto) == 1
 
 
+def test_near_tie_does_not_expand_the_exact_argmax():
+    active = [0, 1]
+    gap_by_arm = {0: 1.0, 1: 1.0 - 1.0e-7}
+    empirical_pareto = (0,)
+
+    # The paper's non-Pareto-first rule applies only inside the exact argmax.
+    assert np.isclose(gap_by_arm[0], gap_by_arm[1])
+    assert choose_removal_arm(active, gap_by_arm, empirical_pareto) == 0
+
+
+def test_default_constants_match_algorithm_one_and_theorem_4_1():
+    config = VBEGEConfig(delta=0.05)
+
+    assert (config.sample_const, config.threshold_const, config.log_const) == (
+        2.0,
+        4.0,
+        4.0,
+    )
+
+
 def test_uniform_focal_borda_fc_symmetric_small():
     theta, _ = symmetric_hard(K=4, d=2, Delta=2.5, seed=0, permute=False)
     out = run_uniform_focal_borda_fc(

@@ -29,7 +29,14 @@ from .core import borda, dynamic_range_B, kappa_B, strict_pareto_set
 from .gaps import compute_gaps
 from .instances import make_instance
 from .compat import import_pandas_quietly
-from .io_utils import dumps_json, ensure_parent, load_yaml, stable_seed, write_dataframe
+from .io_utils import (
+    dumps_json,
+    ensure_parent,
+    load_yaml,
+    stable_seed,
+    write_dataframe,
+    write_run_manifest,
+)
 from .metrics import hamming_set_distance, set_error
 
 pd = import_pandas_quietly()
@@ -512,9 +519,19 @@ def main(argv=None):
             final_rows = [json.loads(line) for line in f if line.strip()]
         df = pd.DataFrame(final_rows).sort_values("run_id")
         actual_out = write_dataframe(df, out_path)
+        manifest = write_run_manifest(
+            actual_out,
+            config=args.config,
+            project_root=Path(__file__).resolve().parents[1],
+            scheduled_rows=len(jobs),
+            base_seed=base_seed,
+        )
     else:
         actual_out = checkpoint_path
+        manifest = None
     print(f"wrote {len(jobs)} scheduled rows; output at {actual_out}")
+    if manifest is not None:
+        print(f"wrote reproducibility manifest at {manifest}")
 
 
 if __name__ == "__main__":

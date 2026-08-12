@@ -1,8 +1,1 @@
-numpy
-pandas
-scipy
-matplotlib
-pytest
-pyyaml
-tqdm
-pyarrow
+-e .[dev]

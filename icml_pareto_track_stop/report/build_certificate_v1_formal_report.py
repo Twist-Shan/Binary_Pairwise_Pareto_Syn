@@ -532,11 +532,9 @@ L_m=\log\!\left(\frac{{c_{{\log}}Kdm^2}}{{\delta}}\right),\qquad
 n_m=\left\lceil\frac{{c_sL_m}}{{\varepsilon_m^2}}\right\rceil,
 \]
 and compares empirical accept/reject gaps with
-$c_\theta\sqrt{{L_m/(2n_m)}}$. The practical constants
-$(c_s,c_\theta,c_{{\log}})=(2,4,4)$ are fixed in every cell. These practical
-constants differ from conservative proof constants but were selected before
-the experiment, checked by the separate constant-sensitivity study, and then
-held fixed throughout all sections.
+$c_\theta\sqrt{{L_m/(2n_m)}}$. The common Algorithm~1 / Theorem~4.1 constants
+$(c_s,c_\theta,c_{{\log}})=(2,4,4)$ are fixed in every cell and are held fixed
+throughout all sections.
 
 \subsection{{Scalar BT-GLR Track-and-Stop source}}
 

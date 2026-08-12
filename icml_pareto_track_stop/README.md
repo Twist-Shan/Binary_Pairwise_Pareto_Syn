@@ -1,7 +1,8 @@
 # Isolated VB-EGE vs. Pareto BT-GLR Track-and-Stop
 
 This package contains the isolated two-algorithm experiment comparing
-`VB-EGE-practical` with a heuristic Pareto extension of BT-GLR
+the paper's main VB-EGE implementation (historical raw label
+`VB-EGE-practical`) with a heuristic Pareto extension of BT-GLR
 Track-and-Stop. It reuses the main synthetic generators, strict Pareto
 convention, latent-instance seeds, and repetition counts.
 
@@ -34,6 +35,8 @@ sample_const = 2.0
 threshold_const = 4.0
 log_const = 4.0
 ```
+
+These are the common Algorithm 1 / Theorem 4.1 constants in the current paper.
 
 ### Pareto BT-GLR Track-and-Stop
 
